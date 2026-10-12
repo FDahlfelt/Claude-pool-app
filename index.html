@@ -216,6 +216,8 @@
   // ---------- State ----------
   let state = migrate(load());
   let tab = state ? 'program' : 'setup';
+  // Pre-fills the setup form when switching game mode for the same players.
+  let draft = null;
 
   function load() {
     try {
@@ -679,6 +681,11 @@
         <div class="row" style="margin-top:12px"><button class="btn" data-action="save-names">Gem navne</button></div>
       </div>
       <div class="card">
+        <h2 style="margin-top:0">Skift spilform</h2>
+        <p class="muted small">Vil I spille færre (eller flere) kampe? Vælg en ny spilform med de samme spillere. Resultaterne indtil nu slettes.</p>
+        <button class="btn" data-action="change-mode">Skift spilform</button>
+      </div>
+      <div class="card">
         <h2 style="margin-top:0">Backup</h2>
         <p class="muted small">Data gemmes kun i denne browser. Eksportér en fil, hvis I vil flytte turneringen til en anden telefon.</p>
         <div class="row">
@@ -692,21 +699,25 @@
         <button class="btn danger" data-action="reset-all">Slet og start forfra</button>
       </div>`;
     }
+    const d = draft || {};
+    const names = d.names || DEFAULT_NAMES;
+    const mode = d.mode || 'league';
+    const poSize = d.playoffSize ?? 4;
     const opts = (vals, sel, fmt = n => n) => vals.map(n => `<option value="${n}" ${n === sel ? 'selected' : ''}>${fmt(n)}</option>`).join('');
     return `<div class="card">
       <h2 style="margin-top:0">Opret turnering</h2>
       <label for="tName">Navn</label>
-      <input type="text" id="tName" value="Pool-turnering">
+      <input type="text" id="tName" value="${esc(d.name || 'Pool-turnering')}">
       <label>Spillere</label>
       <div class="players-input" id="playerInputs">
-        ${DEFAULT_NAMES.map((n, i) => playerInput(n, i)).join('')}
+        ${names.map((n, i) => playerInput(n, i)).join('')}
       </div>
       <div class="row" style="margin-top:8px"><button class="btn secondary" data-action="add-player">+ Tilføj spiller</button></div>
 
       <h2>Spilform</h2>
       <div class="modes">
         ${Object.entries(MODES).map(([k, m]) => `<label class="mode-opt" data-mode-opt="${k}">
-          <input type="radio" name="mode" value="${k}" ${k === 'league' ? 'checked' : ''}>
+          <input type="radio" name="mode" value="${k}" ${k === mode ? 'checked' : ''}>
           <span class="t">${m.name}</span>
           <span class="n" data-count="${k}"></span>
           <span class="d">${m.desc}</span>
@@ -717,33 +728,33 @@
       <div class="row" style="align-items:flex-start">
         <div style="flex:1;min-width:140px">
           <label for="raceTo" id="raceToLabel">Grundspil: race to</label>
-          <select id="raceTo">${opts([1, 2, 3, 4, 5, 6, 7], 3, n => `${n} (bedst af ${2 * n - 1})`)}</select>
+          <select id="raceTo">${opts([1, 2, 3, 4, 5, 6, 7], d.raceTo || 3, n => `${n} (bedst af ${2 * n - 1})`)}</select>
         </div>
         <div style="flex:1;min-width:140px" id="ppwWrap">
           <label for="ppw">Point for sejr</label>
-          <select id="ppw">${opts([1, 2, 3], 2)}</select>
+          <select id="ppw">${opts([1, 2, 3], d.pointsPerWin || 2)}</select>
         </div>
       </div>
       <div id="poSizeWrap">
         <label for="poSize">Slutspil</label>
         <select id="poSize">
-          <option value="4" selected>Top 4: semifinaler + finale</option>
-          <option value="2">Top 2: kun finale</option>
-          <option value="0">Intet slutspil – vinderen af grundspillet vinder</option>
+          <option value="4" ${poSize === 4 ? 'selected' : ''}>Top 4: semifinaler + finale</option>
+          <option value="2" ${poSize === 2 ? 'selected' : ''}>Top 2: kun finale</option>
+          <option value="0" ${poSize === 0 ? 'selected' : ''}>Intet slutspil – vinderen af grundspillet vinder</option>
         </select>
       </div>
       <div class="row" style="align-items:flex-start">
         <div style="flex:1;min-width:140px">
           <label for="poRace">Semifinaler: race to</label>
-          <select id="poRace">${opts([1, 2, 3, 4, 5, 6, 7], 4)}</select>
+          <select id="poRace">${opts([1, 2, 3, 4, 5, 6, 7], d.playoffRaceTo || 4)}</select>
         </div>
         <div style="flex:1;min-width:140px">
           <label for="finRace">Finale: race to</label>
-          <select id="finRace">${opts([1, 2, 3, 4, 5, 6, 7, 8, 9], 5)}</select>
+          <select id="finRace">${opts([1, 2, 3, 4, 5, 6, 7, 8, 9], d.finalRaceTo || 5)}</select>
         </div>
       </div>
       <label style="display:flex;gap:8px;align-items:center;margin-top:12px;color:var(--text)">
-        <input type="checkbox" id="bronze" checked> Bronzekamp om 3. pladsen
+        <input type="checkbox" id="bronze" ${d.bronzeMatch === false ? '' : 'checked'}> Bronzekamp om 3. pladsen
       </label>
       <div class="summary" id="setupSummary"></div>
       <div style="margin-top:18px"><button class="btn" data-action="create">Lav kampprogram</button></div>
@@ -856,9 +867,28 @@
       case 'reset-playoff':
         if (confirm('Slette slutspillet og alle dets resultater?')) { state.bracket = null; save(); render(); }
         break;
+      case 'change-mode':
+        if (confirm('Skifte spilform? Spillerne beholdes, men alle resultater slettes.')) {
+          draft = {
+            name: state.name,
+            names: state.players.map(p => p.name),
+            mode: state.mode,
+            raceTo: state.raceTo,
+            pointsPerWin: state.pointsPerWin,
+            playoffSize: state.mode === 'knockout' ? 4 : state.playoffSize,
+            playoffRaceTo: state.playoffRaceTo,
+            finalRaceTo: state.finalRaceTo,
+            bronzeMatch: state.bronzeMatch,
+          };
+          state = null;
+          try { localStorage.removeItem(STORAGE_KEY); } catch {}
+          tab = 'setup'; render(); window.scrollTo(0, 0);
+          toast('Vælg en ny spilform og tryk "Lav kampprogram"');
+        }
+        break;
       case 'reset-all':
         if (confirm('Er I sikre? Alle resultater slettes.')) {
-          state = null;
+          state = null; draft = null;
           try { localStorage.removeItem(STORAGE_KEY); } catch {}
           tab = 'setup'; render();
         }
