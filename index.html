@@ -198,6 +198,16 @@
   </div>
 </dialog>
 
+<dialog id="confirmDialog">
+  <div class="modal-body">
+    <h3 id="confirmText"></h3>
+    <div class="modal-actions" style="justify-content:flex-end">
+      <button class="btn secondary" id="confirmNo" type="button">Annuller</button>
+      <button class="btn danger" id="confirmYes" type="button">Ja</button>
+    </div>
+  </div>
+</dialog>
+
 <div class="toast" id="toast"></div>
 <input type="file" id="importFile" accept="application/json,.json" hidden>
 
@@ -248,6 +258,24 @@
   const $ = (s, el = document) => el.querySelector(s);
   const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const mk = (a, b, extra) => ({ id: uid(), a, b, sa: null, sb: null, ...extra });
+
+  // In-page replacement for window.confirm, which embedded/sandboxed pages may block.
+  function ask(text, yesLabel = 'Ja') {
+    const d = $('#confirmDialog');
+    $('#confirmText').textContent = text;
+    $('#confirmYes').textContent = yesLabel;
+    return new Promise(resolve => {
+      const done = ok => {
+        $('#confirmYes').onclick = $('#confirmNo').onclick = d.onclose = null;
+        if (d.open) d.close();
+        resolve(ok);
+      };
+      $('#confirmYes').onclick = () => done(true);
+      $('#confirmNo').onclick = () => done(false);
+      d.onclose = () => done(false);
+      d.showModal();
+    });
+  }
 
   function toast(msg) {
     const t = $('#toast');
@@ -834,7 +862,7 @@
   document.addEventListener('input', updateSetup);
   document.addEventListener('change', updateSetup);
 
-  document.addEventListener('click', e => {
+  document.addEventListener('click', async e => {
     const t = e.target.closest('[data-tab],[data-action],[data-match]');
     if (!t) return;
     if (t.dataset.tab) { tab = t.dataset.tab; render(); window.scrollTo(0, 0); return; }
@@ -865,10 +893,10 @@
       }
       case 'start-playoff': createPlayoff(); save(); render(); break;
       case 'reset-playoff':
-        if (confirm('Slette slutspillet og alle dets resultater?')) { state.bracket = null; save(); render(); }
+        if (await ask('Slette slutspillet og alle dets resultater?', 'Slet slutspil')) { state.bracket = null; save(); render(); }
         break;
       case 'change-mode':
-        if (confirm('Skifte spilform? Spillerne beholdes, men alle resultater slettes.')) {
+        if (await ask('Skifte spilform? Spillerne beholdes, men alle resultater slettes.', 'Skift spilform')) {
           draft = {
             name: state.name,
             names: state.players.map(p => p.name),
@@ -887,7 +915,7 @@
         }
         break;
       case 'reset-all':
-        if (confirm('Er I sikre? Alle resultater slettes.')) {
+        if (await ask('Er I sikre? Alle resultater slettes.', 'Slet alt')) {
           state = null; draft = null;
           try { localStorage.removeItem(STORAGE_KEY); } catch {}
           tab = 'setup'; render();
@@ -914,7 +942,7 @@
     try {
       const data = JSON.parse(await f.text());
       if (!Array.isArray(data.players) || !Array.isArray(data.rounds)) throw new Error();
-      if (state && !confirm('Erstatte den nuværende turnering med backup-filen?')) return;
+      if (state && !(await ask('Erstatte den nuværende turnering med backup-filen?', 'Erstat'))) return;
       state = migrate(data); save(); tab = 'program'; render(); toast('Backup indlæst');
     } catch { toast('Ugyldig fil'); }
   });
@@ -979,8 +1007,8 @@
       toast('Indledende kampe færdige – start slutspillet! 🏆');
     } else toast('Resultat gemt');
   });
-  $('#dlgClear').addEventListener('click', () => {
-    if (!confirm('Fjerne resultatet for denne kamp?')) return;
+  $('#dlgClear').addEventListener('click', async () => {
+    if (!(await ask('Fjerne resultatet for denne kamp?', 'Fjern'))) return;
     editing.m.sa = null; editing.m.sb = null;
     syncBracket(); save(); dlg.close(); render();
   });
