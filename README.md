@@ -6,8 +6,12 @@ En lille app til at holde styr på en pool-/billardturnering mellem venner.
 
 Åbn `index.html` i en browser (virker fint på mobilen). Der er intet at installere.
 
-1. **Opsætning** – skriv spillernes navne, og vælg regler (race to, point for sejr, slutspil).
-2. **Kampe** – appen laver et kampprogram, hvor alle møder alle én gang. Med 7 spillere bliver det
+1. **Opsætning** – skriv spillernes navne, vælg spilform og regler (race to, point for sejr, slutspil).
+   Med 7 spillere giver spilformerne:
+   - **Alle mod alle**: 21 kampe + slutspil (25 i alt med top 4 og bronzekamp)
+   - **Gruppespil**: to grupper (4 og 3 spillere), 9 gruppekampe + slutspil (13 i alt)
+   - **Knockout**: lodtrækning, taber man er man ude – 6 kampe + bronzekamp (7 i alt)
+2. **Kampe** – i *Alle mod alle* laver appen laver et kampprogram, hvor alle møder alle én gang. Med 7 spillere bliver det
    21 kampe fordelt på 7 runder, og i hver runde sidder én spiller over. Tryk på en kamp for at indtaste resultatet.
 3. **Stilling** – tabellen opdateres automatisk. Ved pointlighed afgøres placeringen af
    frame-difference, derefter vundne frames og til sidst indbyrdes opgør. Nederst er en
