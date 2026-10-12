@@ -1,0 +1,742 @@
+<!doctype html>
+<html lang="da">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0d3b2a">
+<title>Pool-turnering</title>
+<style>
+  :root {
+    --felt: #0d3b2a;
+    --felt-2: #12503a;
+    --bg: #0a2219;
+    --card: #133a2c;
+    --card-2: #1a4a38;
+    --text: #eef6f1;
+    --muted: #9fbfb0;
+    --accent: #f2c14e;
+    --win: #5fd38d;
+    --loss: #ef7d7d;
+    --line: #2a5a47;
+    --radius: 12px;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    -webkit-tap-highlight-color: transparent;
+  }
+  header {
+    background: linear-gradient(180deg, var(--felt-2), var(--felt));
+    padding: 16px 16px 0;
+    position: sticky; top: 0; z-index: 10;
+    box-shadow: 0 2px 8px rgba(0,0,0,.35);
+  }
+  h1 { margin: 0 0 4px; font-size: 1.35rem; display: flex; align-items: center; gap: 10px; }
+  .ball {
+    width: 28px; height: 28px; border-radius: 50%; background: #111; color: #111;
+    display: inline-grid; place-items: center; font-size: .75rem; font-weight: 800;
+    box-shadow: inset -4px -4px 8px rgba(255,255,255,.12);
+  }
+  .ball span { background: #fff; border-radius: 50%; width: 14px; height: 14px; display: grid; place-items: center; }
+  .sub { color: var(--muted); font-size: .85rem; margin-bottom: 10px; }
+  nav { display: flex; gap: 4px; overflow-x: auto; }
+  nav button {
+    flex: 1; min-width: 80px; background: none; border: 0; color: var(--muted);
+    padding: 10px 8px 12px; font-size: .95rem; font-weight: 600; cursor: pointer;
+    border-bottom: 3px solid transparent;
+  }
+  nav button.active { color: var(--accent); border-bottom-color: var(--accent); }
+  main { max-width: 760px; margin: 0 auto; padding: 16px; }
+  h2 { font-size: 1.1rem; margin: 22px 0 10px; }
+  h2:first-child { margin-top: 4px; }
+  .card { background: var(--card); border-radius: var(--radius); padding: 14px; margin-bottom: 12px; }
+  .muted { color: var(--muted); }
+  .small { font-size: .85rem; }
+  button.btn, .btn {
+    background: var(--accent); color: #1b1b1b; border: 0; border-radius: 10px;
+    padding: 11px 16px; font-size: 1rem; font-weight: 700; cursor: pointer;
+  }
+  .btn.secondary { background: var(--card-2); color: var(--text); }
+  .btn.danger { background: #7a2a2a; color: #fff; }
+  .btn:disabled { opacity: .45; cursor: not-allowed; }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  input[type=text], input[type=number], select {
+    background: var(--bg); color: var(--text); border: 1px solid var(--line);
+    border-radius: 8px; padding: 10px; font-size: 1rem; width: 100%;
+  }
+  label { display: block; font-size: .85rem; color: var(--muted); margin: 10px 0 4px; }
+  .players-input { display: grid; gap: 8px; }
+  .players-input .row input { flex: 1; }
+  .icon-btn { background: var(--card-2); color: var(--text); border: 0; border-radius: 8px; width: 42px; height: 42px; font-size: 1.1rem; cursor: pointer; }
+
+  /* Matches */
+  .round-title { display: flex; justify-content: space-between; align-items: baseline; }
+  .match {
+    display: grid; grid-template-columns: 1fr auto 1fr; gap: 8px; align-items: center;
+    padding: 10px 0;
+  }
+  .match + .match { border-top: 1px solid var(--line); }
+  .match .p { font-weight: 600; overflow-wrap: anywhere; }
+  .match .p.a { text-align: right; }
+  .match .p.win { color: var(--win); }
+  .match .p.lose { color: var(--muted); font-weight: 500; }
+  .score {
+    display: flex; align-items: center; gap: 6px; background: var(--bg);
+    border-radius: 10px; padding: 6px 10px; font-variant-numeric: tabular-nums;
+    font-weight: 800; font-size: 1.15rem; min-width: 84px; justify-content: center;
+    cursor: pointer; border: 1px solid var(--line);
+  }
+  .score.pending { color: var(--muted); font-weight: 600; font-size: .9rem; }
+  .bye { font-size: .85rem; color: var(--muted); margin-top: 6px; }
+  .done-badge { font-size: .75rem; color: var(--win); font-weight: 700; }
+
+  /* Table */
+  table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+  th, td { padding: 9px 6px; text-align: center; }
+  th { color: var(--muted); font-size: .75rem; text-transform: uppercase; letter-spacing: .03em; font-weight: 600; }
+  td.name, th.name { text-align: left; }
+  tbody tr { border-top: 1px solid var(--line); }
+  tbody tr.top4 td.pos { color: var(--accent); font-weight: 800; }
+  td.pts { font-weight: 800; color: var(--accent); }
+  .form { display: inline-flex; gap: 3px; }
+  .form i { width: 16px; height: 16px; border-radius: 4px; font-style: normal; font-size: .65rem; font-weight: 800; display: grid; place-items: center; color: #102; }
+  .form i.W { background: var(--win); }
+  .form i.L { background: var(--loss); }
+  .hide-sm { }
+  @media (max-width: 520px) { .hide-sm { display: none; } th, td { padding: 8px 3px; } }
+
+  /* Bracket */
+  .bracket { display: grid; gap: 12px; }
+  .bm-label { font-size: .75rem; text-transform: uppercase; color: var(--muted); letter-spacing: .04em; margin-bottom: 4px; }
+  .champion {
+    text-align: center; padding: 22px 14px; border-radius: var(--radius);
+    background: radial-gradient(circle at 50% 0%, #3d5c22, var(--card));
+    border: 2px solid var(--accent);
+  }
+  .champion .trophy { font-size: 2.6rem; }
+  .champion .who { font-size: 1.5rem; font-weight: 800; color: var(--accent); margin-top: 4px; }
+
+  /* Modal */
+  dialog {
+    border: 0; border-radius: 16px; padding: 0; background: var(--card); color: var(--text);
+    width: min(420px, calc(100vw - 32px));
+  }
+  dialog::backdrop { background: rgba(0,0,0,.6); }
+  .modal-body { padding: 18px; }
+  .modal-body h3 { margin: 0 0 4px; }
+  .scorer { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 16px 0; }
+  .side { background: var(--bg); border-radius: 12px; padding: 12px; text-align: center; }
+  .side .nm { font-weight: 700; margin-bottom: 8px; overflow-wrap: anywhere; min-height: 1.3em; }
+  .side .val { font-size: 2.6rem; font-weight: 800; font-variant-numeric: tabular-nums; }
+  .side .ctl { display: flex; gap: 8px; justify-content: center; margin-top: 8px; }
+  .side .ctl button { width: 48px; height: 48px; font-size: 1.4rem; border-radius: 10px; border: 0; background: var(--card-2); color: var(--text); cursor: pointer; }
+  .side.leading .val { color: var(--win); }
+  .hint { font-size: .85rem; color: var(--muted); min-height: 1.2em; }
+  .modal-actions { display: flex; gap: 8px; justify-content: space-between; margin-top: 14px; flex-wrap: wrap; }
+  .toast {
+    position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%);
+    background: #000c; color: #fff; padding: 10px 16px; border-radius: 10px; font-size: .9rem;
+    opacity: 0; transition: opacity .2s; pointer-events: none; z-index: 50;
+  }
+  .toast.show { opacity: 1; }
+  .progress { height: 6px; background: var(--bg); border-radius: 3px; overflow: hidden; margin-top: 8px; }
+  .progress div { height: 100%; background: var(--accent); }
+</style>
+</head>
+<body>
+<header>
+  <h1><span class="ball"><span>8</span></span><span id="title">Pool-turnering</span></h1>
+  <div class="sub" id="subtitle"></div>
+  <nav id="nav"></nav>
+</header>
+<main id="main"></main>
+
+<dialog id="scoreDialog">
+  <div class="modal-body">
+    <h3 id="dlgTitle">Indtast resultat</h3>
+    <div class="muted small" id="dlgSub"></div>
+    <div class="scorer">
+      <div class="side" id="sideA">
+        <div class="nm" id="nmA"></div>
+        <div class="val" id="valA">0</div>
+        <div class="ctl"><button type="button" data-side="a" data-d="-1">−</button><button type="button" data-side="a" data-d="1">+</button></div>
+      </div>
+      <div class="side" id="sideB">
+        <div class="nm" id="nmB"></div>
+        <div class="val" id="valB">0</div>
+        <div class="ctl"><button type="button" data-side="b" data-d="-1">−</button><button type="button" data-side="b" data-d="1">+</button></div>
+      </div>
+    </div>
+    <div class="hint" id="dlgHint"></div>
+    <div class="modal-actions">
+      <button class="btn danger" id="dlgClear" type="button">Nulstil kamp</button>
+      <div class="row">
+        <button class="btn secondary" id="dlgCancel" type="button">Annuller</button>
+        <button class="btn" id="dlgSave" type="button">Gem</button>
+      </div>
+    </div>
+  </div>
+</dialog>
+
+<div class="toast" id="toast"></div>
+<input type="file" id="importFile" accept="application/json,.json" hidden>
+
+<script>
+(() => {
+  const STORAGE_KEY = 'pool-turnering-v1';
+  const DEFAULT_NAMES = ['', '', '', '', '', '', ''];
+
+  // ---------- State ----------
+  let state = load();
+  let tab = state ? 'program' : 'setup';
+
+  function load() {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      return raw ? JSON.parse(raw) : null;
+    } catch { return null; }
+  }
+  function save() {
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }
+    catch { toast('Kunne ikke gemme – eksportér en backup!'); }
+  }
+
+  const uid = () => Math.random().toString(36).slice(2, 10);
+  const $ = (s, el = document) => el.querySelector(s);
+  const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+  function toast(msg) {
+    const t = $('#toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    clearTimeout(toast._t);
+    toast._t = setTimeout(() => t.classList.remove('show'), 2200);
+  }
+
+  // ---------- Tournament logic ----------
+  function shuffle(arr) {
+    const a = arr.slice();
+    for (let i = a.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [a[i], a[j]] = [a[j], a[i]];
+    }
+    return a;
+  }
+
+  // Round robin via the circle method. Odd player counts get a bye each round.
+  function makeSchedule(ids) {
+    const list = shuffle(ids);
+    if (list.length % 2) list.push(null);
+    const n = list.length;
+    const rounds = [];
+    let arr = list.slice();
+    for (let r = 0; r < n - 1; r++) {
+      const matches = [];
+      let bye = null;
+      for (let i = 0; i < n / 2; i++) {
+        let a = arr[i], b = arr[n - 1 - i];
+        if (a === null || b === null) { bye = a === null ? b : a; continue; }
+        if (r % 2 === 1) [a, b] = [b, a]; // vary who's listed first
+        matches.push({ id: uid(), a, b, sa: null, sb: null });
+      }
+      rounds.push({ matches: shuffle(matches), bye });
+      arr = [arr[0], arr[n - 1], ...arr.slice(1, n - 1)];
+    }
+    return rounds;
+  }
+
+  const playerName = id => (state.players.find(p => p.id === id) || {}).name || '?';
+  const isDone = m => m && m.sa !== null && m.sb !== null;
+  const winnerOf = m => !isDone(m) ? null : (m.sa > m.sb ? m.a : m.b);
+  const loserOf = m => !isDone(m) ? null : (m.sa > m.sb ? m.b : m.a);
+  const allLeagueMatches = () => state.rounds.flatMap(r => r.matches);
+
+  function standings() {
+    const rows = {};
+    state.players.forEach(p => rows[p.id] = { id: p.id, name: p.name, p: 0, w: 0, l: 0, ff: 0, fa: 0, form: [] });
+    state.rounds.forEach(r => r.matches.forEach(m => {
+      if (!isDone(m)) return;
+      const A = rows[m.a], B = rows[m.b];
+      A.p++; B.p++;
+      A.ff += m.sa; A.fa += m.sb; B.ff += m.sb; B.fa += m.sa;
+      if (m.sa > m.sb) { A.w++; B.l++; A.form.push('W'); B.form.push('L'); }
+      else { B.w++; A.l++; B.form.push('W'); A.form.push('L'); }
+    }));
+    const list = Object.values(rows);
+    list.forEach(r => { r.diff = r.ff - r.fa; r.pts = r.w * state.pointsPerWin; });
+    const h2h = (x, y) => {
+      const m = allLeagueMatches().find(m => isDone(m) && ((m.a === x && m.b === y) || (m.a === y && m.b === x)));
+      if (!m) return 0;
+      return winnerOf(m) === x ? -1 : 1;
+    };
+    list.sort((x, y) =>
+      y.pts - x.pts ||
+      y.diff - x.diff ||
+      y.ff - x.ff ||
+      h2h(x.id, y.id) ||
+      x.name.localeCompare(y.name, 'da'));
+    return list;
+  }
+
+  function leagueProgress() {
+    const all = allLeagueMatches();
+    const done = all.filter(isDone).length;
+    return { done, total: all.length };
+  }
+
+  function createPlayoff() {
+    const st = standings();
+    const size = state.playoffSize;
+    if (size === 4) {
+      state.playoff = {
+        semis: [
+          { id: uid(), a: st[0].id, b: st[3].id, sa: null, sb: null, label: 'Semifinale 1 (1 vs 4)' },
+          { id: uid(), a: st[1].id, b: st[2].id, sa: null, sb: null, label: 'Semifinale 2 (2 vs 3)' },
+        ],
+        final: { id: uid(), a: null, b: null, sa: null, sb: null, label: 'Finale' },
+        bronze: state.bronzeMatch ? { id: uid(), a: null, b: null, sa: null, sb: null, label: 'Bronzekamp' } : null,
+      };
+    } else {
+      state.playoff = {
+        semis: [],
+        final: { id: uid(), a: st[0].id, b: st[1].id, sa: null, sb: null, label: 'Finale (1 vs 2)' },
+        bronze: null,
+      };
+    }
+    syncPlayoff();
+  }
+
+  // Fill final/bronze from semifinal results; drop results that no longer match.
+  function syncPlayoff() {
+    const po = state.playoff;
+    if (!po || !po.semis.length) return;
+    const [s1, s2] = po.semis;
+    const fill = (m, a, b) => {
+      if (!m) return;
+      if (m.a !== a || m.b !== b) { m.a = a; m.b = b; m.sa = null; m.sb = null; }
+    };
+    fill(po.final, winnerOf(s1), winnerOf(s2));
+    fill(po.bronze, loserOf(s1), loserOf(s2));
+  }
+
+  function findMatch(id) {
+    for (const r of state.rounds) {
+      const m = r.matches.find(m => m.id === id);
+      if (m) return { m, raceTo: state.raceTo, ctx: 'Grundspil' };
+    }
+    const po = state.playoff;
+    if (po) {
+      for (const m of [...po.semis, po.final, po.bronze].filter(Boolean)) {
+        if (m.id === id) return { m, raceTo: m === po.final ? state.finalRaceTo : state.playoffRaceTo, ctx: m.label };
+      }
+    }
+    return null;
+  }
+
+  // ---------- Rendering ----------
+  const TABS = [
+    ['program', 'Kampe'],
+    ['table', 'Stilling'],
+    ['playoff', 'Slutspil'],
+    ['setup', 'Opsætning'],
+  ];
+
+  function render() {
+    $('#title').textContent = state ? state.name : 'Pool-turnering';
+    if (state) {
+      const { done, total } = leagueProgress();
+      $('#subtitle').textContent = `${state.players.length} spillere · race to ${state.raceTo} · ${done}/${total} kampe spillet`;
+    } else {
+      $('#subtitle').textContent = 'Opret en turnering for at komme i gang';
+    }
+    $('#nav').innerHTML = TABS
+      .filter(([k]) => state || k === 'setup')
+      .map(([k, l]) => `<button class="${k === tab ? 'active' : ''}" data-tab="${k}">${l}</button>`).join('');
+    const main = $('#main');
+    if (tab === 'program') main.innerHTML = renderProgram();
+    else if (tab === 'table') main.innerHTML = renderTable();
+    else if (tab === 'playoff') main.innerHTML = renderPlayoff();
+    else main.innerHTML = renderSetup();
+  }
+
+  function matchRow(m, raceTo) {
+    const done = isDone(m);
+    const w = winnerOf(m);
+    const cls = id => !done ? '' : (id === w ? 'win' : 'lose');
+    const an = m.a ? esc(playerName(m.a)) : '<span class="muted">TBD</span>';
+    const bn = m.b ? esc(playerName(m.b)) : '<span class="muted">TBD</span>';
+    const ready = m.a && m.b;
+    const score = done
+      ? `<span>${m.sa}</span><span class="muted">–</span><span>${m.sb}</span>`
+      : (ready ? 'Indtast' : 'Venter');
+    return `<div class="match">
+      <div class="p a ${cls(m.a)}">${an}</div>
+      <div class="score ${done ? '' : 'pending'}" ${ready ? `data-match="${m.id}"` : ''} title="Race to ${raceTo}">${score}</div>
+      <div class="p b ${cls(m.b)}">${bn}</div>
+    </div>`;
+  }
+
+  function renderProgram() {
+    const { done, total } = leagueProgress();
+    const pct = total ? Math.round(done / total * 100) : 0;
+    let html = `<div class="card">
+      <div class="row" style="justify-content:space-between">
+        <strong>Grundspil – alle mod alle</strong><span class="muted small">${done}/${total}</span>
+      </div>
+      <div class="progress"><div style="width:${pct}%"></div></div>
+      <div class="muted small" style="margin-top:8px">Tryk på en kamp for at indtaste resultatet. Hver kamp spilles til ${state.raceTo} vundne frames.</div>
+    </div>`;
+    state.rounds.forEach((r, i) => {
+      const rDone = r.matches.every(isDone);
+      html += `<div class="card">
+        <div class="round-title"><h2 style="margin:0 0 6px">Runde ${i + 1}</h2>${rDone ? '<span class="done-badge">✓ Færdig</span>' : ''}</div>
+        ${r.matches.map(m => matchRow(m, state.raceTo)).join('')}
+        ${r.bye ? `<div class="bye">Sidder over: <strong>${esc(playerName(r.bye))}</strong> (henter øl 🍺)</div>` : ''}
+      </div>`;
+    });
+    return html;
+  }
+
+  function renderTable() {
+    const st = standings();
+    const cut = state.playoffSize;
+    const rows = st.map((r, i) => `<tr class="${i < cut ? 'top4' : ''}">
+      <td class="pos">${i + 1}</td>
+      <td class="name"><strong>${esc(r.name)}</strong></td>
+      <td>${r.p}</td>
+      <td>${r.w}</td>
+      <td>${r.l}</td>
+      <td class="hide-sm">${r.ff}-${r.fa}</td>
+      <td>${r.diff > 0 ? '+' : ''}${r.diff}</td>
+      <td class="pts">${r.pts}</td>
+      <td class="hide-sm"><span class="form">${r.form.slice(-5).map(f => `<i class="${f}">${f === 'W' ? 'V' : 'T'}</i>`).join('')}</span></td>
+    </tr>`).join('');
+    return `<div class="card">
+      <table>
+        <thead><tr>
+          <th>#</th><th class="name">Spiller</th><th title="Kampe">K</th><th title="Vundne">V</th><th title="Tabte">T</th>
+          <th class="hide-sm" title="Frames vundet-tabt">Frames</th><th title="Frame-difference">+/-</th><th title="Point">P</th><th class="hide-sm">Form</th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>
+    <div class="muted small">
+      Sejr = ${state.pointsPerWin} point. Ved pointlighed afgøres placeringen af frame-difference, derefter flest vundne frames, derefter indbyrdes opgør.
+      ${state.playoffSize ? `De ${state.playoffSize} bedste (markeret med gult) går videre til slutspillet.` : ''}
+    </div>
+    ${renderMatrix()}`;
+  }
+
+  function renderMatrix() {
+    const ps = state.players;
+    const res = {};
+    allLeagueMatches().forEach(m => {
+      if (!isDone(m)) return;
+      res[m.a + '|' + m.b] = [m.sa, m.sb];
+      res[m.b + '|' + m.a] = [m.sb, m.sa];
+    });
+    const short = n => esc(n.length > 4 ? n.slice(0, 3) + '.' : n);
+    return `<h2>Alle mod alle</h2>
+    <div class="card" style="overflow-x:auto">
+      <table class="small">
+        <thead><tr><th></th>${ps.map(p => `<th title="${esc(p.name)}">${short(p.name)}</th>`).join('')}</tr></thead>
+        <tbody>${ps.map(p => `<tr><td class="name"><strong>${esc(p.name)}</strong></td>${ps.map(q => {
+          if (p.id === q.id) return '<td class="muted">—</td>';
+          const r = res[p.id + '|' + q.id];
+          if (!r) return '<td class="muted">·</td>';
+          return `<td style="color:${r[0] > r[1] ? 'var(--win)' : 'var(--loss)'};font-weight:700">${r[0]}-${r[1]}</td>`;
+        }).join('')}</tr>`).join('')}</tbody>
+      </table>
+    </div>`;
+  }
+
+  function renderPlayoff() {
+    if (!state.playoffSize) {
+      return `<div class="card">Slutspil er slået fra. Vinderen af grundspillet er mester:</div>${championCard(standings()[0], leagueProgress().done === leagueProgress().total)}`;
+    }
+    const { done, total } = leagueProgress();
+    const po = state.playoff;
+    if (!po) {
+      const ready = done === total;
+      return `<div class="card">
+        <h2 style="margin-top:0">Slutspil</h2>
+        <p class="muted">${state.playoffSize === 4
+          ? 'De 4 bedste fra grundspillet går videre: 1 mod 4 og 2 mod 3 i semifinalerne, og vinderne mødes i finalen.'
+          : 'De 2 bedste fra grundspillet mødes i en finale.'}</p>
+        <p class="muted small">Semifinaler: race to ${state.playoffRaceTo} · Finale: race to ${state.finalRaceTo}</p>
+        ${ready ? '' : `<p class="small" style="color:var(--accent)">Grundspillet er ikke færdigt endnu (${done}/${total}). Du kan stadig starte slutspillet ud fra den nuværende stilling.</p>`}
+        <button class="btn" data-action="start-playoff">Start slutspil</button>
+      </div>`;
+    }
+    let html = '<div class="bracket">';
+    po.semis.forEach(m => html += `<div class="card"><div class="bm-label">${esc(m.label)} · race to ${state.playoffRaceTo}</div>${matchRow(m, state.playoffRaceTo)}</div>`);
+    html += `<div class="card" style="border:1px solid var(--accent)"><div class="bm-label">🏆 ${esc(po.final.label)} · race to ${state.finalRaceTo}</div>${matchRow(po.final, state.finalRaceTo)}</div>`;
+    if (po.bronze) html += `<div class="card"><div class="bm-label">🥉 ${esc(po.bronze.label)} · race to ${state.playoffRaceTo}</div>${matchRow(po.bronze, state.playoffRaceTo)}</div>`;
+    html += '</div>';
+    const champ = winnerOf(po.final);
+    if (champ) {
+      const runnerUp = loserOf(po.final);
+      const third = po.bronze ? winnerOf(po.bronze) : null;
+      html += championCard({ name: playerName(champ) }, true, runnerUp && playerName(runnerUp), third && playerName(third));
+    }
+    html += `<div style="margin-top:16px"><button class="btn secondary" data-action="reset-playoff">Nulstil slutspil</button></div>`;
+    return html;
+  }
+
+  function championCard(row, final, second, third) {
+    if (!row) return '';
+    return `<div class="champion" style="margin-top:12px">
+      <div class="trophy">🏆</div>
+      <div class="muted small">${final ? 'Turneringens mester' : 'Fører lige nu'}</div>
+      <div class="who">${esc(row.name)}</div>
+      ${second ? `<div class="small" style="margin-top:8px">🥈 ${esc(second)}${third ? ` &nbsp; 🥉 ${esc(third)}` : ''}</div>` : ''}
+    </div>`;
+  }
+
+  function renderSetup() {
+    const names = state ? state.players.map(p => p.name) : DEFAULT_NAMES;
+    const s = state || { name: 'Pool-turnering', raceTo: 3, playoffRaceTo: 4, finalRaceTo: 5, pointsPerWin: 2, playoffSize: 4, bronzeMatch: true };
+    let html = '';
+    if (state) {
+      html += `<div class="card">
+        <h2 style="margin-top:0">Turnering i gang</h2>
+        <label for="renName">Navn på turneringen</label>
+        <input type="text" id="renName" value="${esc(state.name)}">
+        <label>Spillernavne (kan rettes uden at nulstille)</label>
+        <div class="players-input">${state.players.map(p => `<input type="text" data-rename="${p.id}" value="${esc(p.name)}">`).join('')}</div>
+        <div class="row" style="margin-top:12px"><button class="btn" data-action="save-names">Gem navne</button></div>
+      </div>
+      <div class="card">
+        <h2 style="margin-top:0">Backup</h2>
+        <p class="muted small">Data gemmes kun i denne browser. Eksportér en fil, hvis I vil flytte turneringen til en anden telefon.</p>
+        <div class="row">
+          <button class="btn secondary" data-action="export">Eksportér</button>
+          <button class="btn secondary" data-action="import">Importér</button>
+        </div>
+      </div>
+      <div class="card">
+        <h2 style="margin-top:0">Ny turnering</h2>
+        <p class="muted small">Sletter alle resultater og starter forfra.</p>
+        <button class="btn danger" data-action="reset-all">Slet og start forfra</button>
+      </div>`;
+      return html;
+    }
+    html += `<div class="card">
+      <h2 style="margin-top:0">Opret turnering</h2>
+      <label for="tName">Navn</label>
+      <input type="text" id="tName" value="${esc(s.name)}">
+      <label>Spillere</label>
+      <div class="players-input" id="playerInputs">
+        ${names.map((n, i) => playerInput(n, i)).join('')}
+      </div>
+      <div class="row" style="margin-top:8px"><button class="btn secondary" data-action="add-player">+ Tilføj spiller</button></div>
+
+      <h2>Regler</h2>
+      <div class="row" style="align-items:flex-start">
+        <div style="flex:1;min-width:140px">
+          <label for="raceTo">Grundspil: race to</label>
+          <select id="raceTo">${[1,2,3,4,5,6,7].map(n => `<option value="${n}" ${n === s.raceTo ? 'selected' : ''}>${n} (bedst af ${2*n-1})</option>`).join('')}</select>
+        </div>
+        <div style="flex:1;min-width:140px">
+          <label for="ppw">Point for sejr</label>
+          <select id="ppw">${[1,2,3].map(n => `<option value="${n}" ${n === s.pointsPerWin ? 'selected' : ''}>${n}</option>`).join('')}</select>
+        </div>
+      </div>
+      <label for="poSize">Slutspil</label>
+      <select id="poSize">
+        <option value="4" ${s.playoffSize === 4 ? 'selected' : ''}>Top 4: semifinaler + finale</option>
+        <option value="2" ${s.playoffSize === 2 ? 'selected' : ''}>Top 2: kun finale</option>
+        <option value="0" ${s.playoffSize === 0 ? 'selected' : ''}>Intet slutspil – vinderen af grundspillet vinder</option>
+      </select>
+      <div class="row" style="align-items:flex-start">
+        <div style="flex:1;min-width:140px">
+          <label for="poRace">Semifinaler: race to</label>
+          <select id="poRace">${[1,2,3,4,5,6,7].map(n => `<option value="${n}" ${n === s.playoffRaceTo ? 'selected' : ''}>${n}</option>`).join('')}</select>
+        </div>
+        <div style="flex:1;min-width:140px">
+          <label for="finRace">Finale: race to</label>
+          <select id="finRace">${[1,2,3,4,5,6,7,8,9].map(n => `<option value="${n}" ${n === s.finalRaceTo ? 'selected' : ''}>${n}</option>`).join('')}</select>
+        </div>
+      </div>
+      <label style="display:flex;gap:8px;align-items:center;margin-top:12px;color:var(--text)">
+        <input type="checkbox" id="bronze" ${s.bronzeMatch ? 'checked' : ''}> Bronzekamp om 3. pladsen
+      </label>
+      <div style="margin-top:18px"><button class="btn" data-action="create">Lav kampprogram</button></div>
+      <p class="muted small">Alle møder alle én gang. Med 7 spillere giver det 21 kampe fordelt på 7 runder – i hver runde sidder én over.</p>
+    </div>
+    <div class="card">
+      <div class="row"><button class="btn secondary" data-action="import">Importér backup</button></div>
+    </div>`;
+    return html;
+  }
+
+  function playerInput(name, i) {
+    return `<div class="row"><input type="text" class="pname" placeholder="Spiller ${i + 1}" value="${esc(name)}"><button class="icon-btn" data-action="remove-player" title="Fjern">✕</button></div>`;
+  }
+
+  // ---------- Actions ----------
+  function createTournament() {
+    const names = [...document.querySelectorAll('.pname')].map(i => i.value.trim()).filter(Boolean);
+    if (names.length < 3) return toast('I skal være mindst 3 spillere');
+    const lower = names.map(n => n.toLowerCase());
+    if (new Set(lower).size !== lower.length) return toast('To spillere har samme navn');
+    const players = names.map(name => ({ id: uid(), name }));
+    let playoffSize = +$('#poSize').value;
+    if (playoffSize > players.length) playoffSize = 2;
+    state = {
+      name: $('#tName').value.trim() || 'Pool-turnering',
+      players,
+      raceTo: +$('#raceTo').value,
+      pointsPerWin: +$('#ppw').value,
+      playoffSize,
+      playoffRaceTo: +$('#poRace').value,
+      finalRaceTo: +$('#finRace').value,
+      bronzeMatch: $('#bronze').checked,
+      rounds: makeSchedule(players.map(p => p.id)),
+      playoff: null,
+      created: new Date().toISOString(),
+    };
+    save();
+    tab = 'program';
+    render();
+    toast('Kampprogram lavet – god fornøjelse! 🎱');
+  }
+
+  document.addEventListener('click', e => {
+    const t = e.target.closest('[data-tab],[data-action],[data-match]');
+    if (!t) return;
+    if (t.dataset.tab) { tab = t.dataset.tab; render(); window.scrollTo(0, 0); return; }
+    if (t.dataset.match) return openScore(t.dataset.match);
+    switch (t.dataset.action) {
+      case 'add-player': {
+        const wrap = $('#playerInputs');
+        wrap.insertAdjacentHTML('beforeend', playerInput('', wrap.children.length));
+        wrap.lastElementChild.querySelector('input').focus();
+        break;
+      }
+      case 'remove-player':
+        t.closest('.row').remove();
+        break;
+      case 'create': createTournament(); break;
+      case 'save-names': {
+        const names = [...document.querySelectorAll('[data-rename]')].map(i => i.value.trim());
+        if (names.some(n => !n)) return toast('Navne må ikke være tomme');
+        document.querySelectorAll('[data-rename]').forEach(i => {
+          const p = state.players.find(p => p.id === i.dataset.rename);
+          if (p) p.name = i.value.trim();
+        });
+        state.name = $('#renName').value.trim() || state.name;
+        save(); render(); toast('Gemt');
+        break;
+      }
+      case 'start-playoff': createPlayoff(); save(); render(); break;
+      case 'reset-playoff':
+        if (confirm('Slette slutspillet og alle dets resultater?')) { state.playoff = null; save(); render(); }
+        break;
+      case 'reset-all':
+        if (confirm('Er I sikre? Alle resultater slettes.')) {
+          state = null;
+          try { localStorage.removeItem(STORAGE_KEY); } catch {}
+          tab = 'setup'; render();
+        }
+        break;
+      case 'export': exportData(); break;
+      case 'import': $('#importFile').click(); break;
+    }
+  });
+
+  function exportData() {
+    const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `pool-turnering-${new Date().toISOString().slice(0, 10)}.json`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  }
+
+  $('#importFile').addEventListener('change', async e => {
+    const f = e.target.files[0];
+    e.target.value = '';
+    if (!f) return;
+    try {
+      const data = JSON.parse(await f.text());
+      if (!Array.isArray(data.players) || !Array.isArray(data.rounds)) throw new Error();
+      if (state && !confirm('Erstatte den nuværende turnering med backup-filen?')) return;
+      state = data; save(); tab = 'program'; render(); toast('Backup indlæst');
+    } catch { toast('Ugyldig fil'); }
+  });
+
+  // ---------- Score dialog ----------
+  const dlg = $('#scoreDialog');
+  let editing = null; // { m, raceTo, a, b }
+
+  function openScore(id) {
+    const found = findMatch(id);
+    if (!found) return;
+    const { m, raceTo, ctx } = found;
+    editing = { m, raceTo, a: m.sa ?? 0, b: m.sb ?? 0 };
+    $('#dlgTitle').textContent = `${playerName(m.a)} vs ${playerName(m.b)}`;
+    $('#dlgSub').textContent = `${ctx} · først til ${raceTo} frames`;
+    $('#nmA').textContent = playerName(m.a);
+    $('#nmB').textContent = playerName(m.b);
+    $('#dlgClear').style.visibility = isDone(m) ? 'visible' : 'hidden';
+    updateDialog();
+    dlg.showModal();
+  }
+
+  function validScore(a, b, raceTo) {
+    return (a === raceTo && b < raceTo) || (b === raceTo && a < raceTo);
+  }
+
+  function updateDialog() {
+    const { a, b, raceTo, m } = editing;
+    $('#valA').textContent = a;
+    $('#valB').textContent = b;
+    $('#sideA').classList.toggle('leading', a > b);
+    $('#sideB').classList.toggle('leading', b > a);
+    const ok = validScore(a, b, raceTo);
+    $('#dlgSave').disabled = !ok;
+    $('#dlgHint').textContent = ok
+      ? `${playerName(a > b ? m.a : m.b)} vinder ${Math.max(a, b)}-${Math.min(a, b)}`
+      : `En spiller skal have ${raceTo} frames.`;
+  }
+
+  dlg.addEventListener('click', e => {
+    const btn = e.target.closest('[data-side]');
+    if (btn) {
+      const k = btn.dataset.side;
+      editing[k] = Math.max(0, Math.min(editing.raceTo, editing[k] + +btn.dataset.d));
+      // Only one player can reach the race target.
+      const other = k === 'a' ? 'b' : 'a';
+      if (editing[k] === editing.raceTo && editing[other] === editing.raceTo) editing[other] = editing.raceTo - 1;
+      updateDialog();
+      return;
+    }
+    if (e.target === dlg) dlg.close(); // click on backdrop
+  });
+
+  $('#dlgCancel').addEventListener('click', () => dlg.close());
+  $('#dlgSave').addEventListener('click', () => {
+    const { m, a, b, raceTo } = editing;
+    if (!validScore(a, b, raceTo)) return;
+    m.sa = a; m.sb = b;
+    syncPlayoff(); save(); dlg.close(); render();
+    const { done, total } = leagueProgress();
+    if (done === total && state.playoffSize && !state.playoff && findMatch(m.id).ctx === 'Grundspil') {
+      toast('Grundspillet er færdigt – start slutspillet! 🏆');
+    } else toast('Resultat gemt');
+  });
+  $('#dlgClear').addEventListener('click', () => {
+    if (!confirm('Fjerne resultatet for denne kamp?')) return;
+    editing.m.sa = null; editing.m.sb = null;
+    syncPlayoff(); save(); dlg.close(); render();
+  });
+
+  render();
+})();
+</script>
+</body>
+</html>
