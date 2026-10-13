@@ -52,7 +52,7 @@ const da = {
   importBtn: 'Importér',
 
   heroTitle: 'Turneringen klarer sig selv. I spiller pool.',
-  heroText: 'Skriv navnene, vælg spilform, og få kampprogram, stilling, slutspil og statistik. Ingen login, og det virker på alle telefoner.',
+  heroText: 'Skriv navnene, vælg spilform, og få kampprogram, stilling, slutspil og statistik. Ingen login, og det virker på både telefon og computer.',
   newTournament: 'Ny turnering',
   tryDemo: 'Se en demo',
   feat1T: 'Fire spilformer',
@@ -333,6 +333,8 @@ const da = {
   resetShort: 'Nulstil',
   eventsN: '{n} turn.',
   ranking: 'Rangliste',
+  keysHint: 'Tastatur under en kamp: ← og → giver frame, Backspace fortryder, 0–7 vælger kugler.',
+  keysMatch: 'Tastatur: ← / → giver frame · Backspace fortryder · R indtaster resultat',
 };
 
 const en = {
@@ -382,7 +384,7 @@ const en = {
   importBtn: 'Import',
 
   heroTitle: 'The tournament runs itself. You play pool.',
-  heroText: 'Add the names, pick a format and get the schedule, standings, playoff and stats. No sign-up, and it works on any phone.',
+  heroText: 'Add the names, pick a format and get the schedule, standings, playoff and stats. No sign-up, and it works on phones and computers alike.',
   newTournament: 'New tournament',
   tryDemo: 'See a demo',
   feat1T: 'Four formats',
@@ -663,6 +665,8 @@ const en = {
   resetShort: 'Reset',
   eventsN: '{n} events',
   ranking: 'Ranking',
+  keysHint: 'Keyboard during a match: ← and → score a frame, Backspace undoes, 0–7 picks balls.',
+  keysMatch: 'Keyboard: ← / → score a frame · Backspace undoes · R enters a result',
 };
 
 const dicts = { da, en };

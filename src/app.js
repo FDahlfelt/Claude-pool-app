@@ -3,7 +3,7 @@ import { db, load, save, getTournament, upsertTournament, removeTournament, clea
 import { tr, setLang, getLang, LANGS } from './i18n.js';
 import { encode, decode, isTournament, summaryText } from './share.js';
 
-const VERSION = '2.1.0';
+const VERSION = '2.2.0';
 const $ = (s, el = document) => el.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const pct = x => Math.round(x * 100) + '%';
@@ -109,8 +109,10 @@ function render() {
   else if (r.name === 'settings') html = viewSettings();
   else if (r.name === 'shared') html = viewShared(r.code);
   else html = viewHome();
+  // On a computer the navigation is a sidebar on every screen; on a phone only the main screens show it.
+  if (!html.includes('class="tabbar')) html += tabbar(r.name === 'players' || r.name === 'settings' ? r.name : 'home', true);
   $('#app').innerHTML = html;
-  document.body.classList.toggle('no-tabbar', !$('#app .tabbar'));
+  document.body.classList.toggle('no-tabbar', !$('#app .tabbar:not(.sub)'));
   afterRender.forEach(f => f());
   ui.pop = null;
   keepAwake(r.name === 'match');
@@ -134,13 +136,16 @@ function bigHeader(title, over, actions = '') {
   return `<header class="hdr big"><div class="ttl">${over ? `<span class="t-over">${over}</span>` : ''}<h1 class="t-h1">${esc(title)}</h1></div>${actions}</header>`;
 }
 
-function tabbar(active) {
+function tabbar(active, sub = false) {
   const item = (key, to, icon, label) =>
     `<button class="tab ${active === key ? 'on' : ''}" data-act="nav" data-to="${to}" ${active === key ? 'aria-current="page"' : ''}>${icon}<span>${label}</span></button>`;
-  return `<nav class="tabbar" aria-label="${tr('appName')}">
+  return `<nav class="tabbar ${sub ? 'sub' : ''}" aria-label="${tr('appName')}">
+    <div class="side-brand">${gameBall('8ball', 30, 'lift')}<span>${tr('appName')}</span></div>
     ${item('home', '#/', ICON.rack, tr('navTournaments'))}
     ${item('players', '#/players', ICON.users, tr('navPlayers'))}
     ${item('settings', '#/settings', ICON.gear, tr('navSettings'))}
+    <button class="btn btn-p side-new" data-act="new">${ICON.plus}<span>${tr('newTournament')}</span></button>
+    <p class="side-keys t-xs">${tr('keysHint')}</p>
   </nav>`;
 }
 
@@ -200,8 +205,8 @@ function viewHome() {
   if (!list.length) return viewWelcome();
   const active = list.filter(t => L.phase(t) !== 'done');
   const finished = list.filter(t => L.phase(t) === 'done');
-  const group = (title, items) => items.length ? `<section class="stack"><div class="sec"><span class="t-over">${title}</span><span class="t-xs ink-3 tnum">${items.length}</span></div>${items.map(tCard).join('')}</section>` : '';
-  return bigHeader(tr('navTournaments'), tr('appName'), `<button class="iconbtn fill" data-act="import" aria-label="${tr('importBtn')}" title="${tr('importBtn')}">${ICON.import}</button>`) +
+  const group = (title, items) => items.length ? `<section class="stack"><div class="sec"><span class="t-over">${title}</span><span class="t-xs ink-3 tnum">${items.length}</span></div><div class="tgrid">${items.map(tCard).join('')}</div></section>` : '';
+  return bigHeader(tr('navTournaments'), tr('appName'), `<button class="btn btn-s btn-sm desk-only" data-act="import">${ICON.import}<span>${tr('importBtn')}</span></button><button class="iconbtn fill mob-only" data-act="import" aria-label="${tr('importBtn')}" title="${tr('importBtn')}">${ICON.import}</button>`) +
     `<main class="page">${group(tr('inProgress'), active)}${group(tr('finished'), finished)}</main>
     <button class="fab" data-act="new">${ICON.plus}<span>${tr('newTournament')}</span></button>` + tabbar('home');
 }
@@ -225,7 +230,7 @@ function viewWelcome() {
         <button class="btn btn-s btn-block" data-act="demo">${ICON.play}<span>${tr('tryDemo')}</span></button>
       </div>
     </section>
-    <section class="stack">${feats.map(([n, f]) => `<div class="card feat">${ballEl(n, 30, 'lift')}<div class="stack" style="gap:4px"><span class="t-h3">${tr(f + 'T')}</span><span class="t-sm ink-2">${tr(f + 'D')}</span></div></div>`).join('')}</section>
+    <section class="feats">${feats.map(([n, f]) => `<div class="card feat">${ballEl(n, 30, 'lift')}<div class="stack" style="gap:4px"><span class="t-h3">${tr(f + 'T')}</span><span class="t-sm ink-2">${tr(f + 'D')}</span></div></div>`).join('')}</section>
     <div class="row center"><button class="btn btn-ghost btn-sm" data-act="import">${ICON.import}<span>${tr('importBtn')}</span></button></div>
   </main>` + tabbar('home');
 }
@@ -365,7 +370,8 @@ function rulesFields() {
 function viewNew() {
   afterRender.push(() => updateSummary(true));
   const games = L.GAMES.map(g => [g, g === 'other' ? tr('game_other') : `${gameBall(g, 20)}${tr('game_' + g)}`]);
-  return header({ back: '#/', title: draft.replaceId ? tr('changeFormat') : tr('newTournament') }) + `<main class="page tight">
+  return header({ back: '#/', title: draft.replaceId ? tr('changeFormat') : tr('newTournament') }) + `<main class="page tight new-grid">
+    <div class="col">
     <section class="stack">
       <label class="lbl" for="f-name" style="margin:0">${tr('tName')}</label>
       <div class="field"><input id="f-name" data-draft="name" value="${esc(draft.name)}" maxlength="60" autocomplete="off"></div>
@@ -382,6 +388,7 @@ function viewNew() {
       </div>
       <div id="known">${knownChips()}</div>
     </section>
+    </div><div class="col">
     <section class="stack">
       <div class="sec"><span class="t-over">${tr('format')}</span></div>
       <div class="fmts" id="formats"></div>
@@ -392,8 +399,11 @@ function viewNew() {
       <div class="sec"><span class="t-over">${tr('rules')}</span></div>
       <div id="rules"></div>
     </section>
-    <section class="feltbox sum" id="summary" aria-live="polite"></section>
-    <button type="button" class="btn btn-p btn-lg btn-block" data-act="create" id="createBtn">${tr('createSchedule')}</button>
+    <div class="create-box">
+      <section class="feltbox sum" id="summary" aria-live="polite"></section>
+      <button type="button" class="btn btn-p btn-lg btn-block" data-act="create" id="createBtn">${tr('createSchedule')}</button>
+    </div>
+    </div>
   </main>`;
 }
 
@@ -559,6 +569,7 @@ function matchRow(t, m, { start = false, ctx = false } = {}) {
 
 function tabOverview(t) {
   let html = heroCard(t);
+  let side = '';
   const live = L.allMatches(t).filter(L.isLive);
   if (live.length) html += `<section class="stack"><div class="sec"><span class="t-over"><span class="live-dot" style="margin-right:8px"></span>${tr('liveNow')}</span></div><div class="card">${live.map(m => matchRow(t, m)).join('')}</div></section>`;
   if (L.phase(t) !== 'done') {
@@ -567,17 +578,17 @@ function tabOverview(t) {
   }
   if (t.format !== 'knockout') {
     const groups = t.format === 'groups' ? t.groups : [{ name: null, players: null }];
-    html += `<section class="stack"><div class="sec"><span class="t-over">${tr('tabTable')}</span><button class="link" data-act="tab" data-tab="table">${tr('seeAll')}${ICON.chev}</button></div>`;
-    html += groups.map(g => {
+    side += `<section class="stack"><div class="sec"><span class="t-over">${tr('tabTable')}</span><button class="link" data-act="tab" data-tab="table">${tr('seeAll')}${ICON.chev}</button></div>`;
+    side += groups.map(g => {
       const rows = L.standingsFor(t, g.players || undefined).slice(0, g.name ? 99 : 5);
       const cut = g.name ? t.settings.advance : L.hasPlayoff(t) ? L.playoffCount(t.format, t.players.length, t.settings) : 0;
       return `<div class="card">${g.name ? `<div class="round-h"><span class="t-over">${tr('groupN', { g: g.name })}</span></div>` : ''}
         ${rows.map((r, i) => `<div class="list-row"><span class="pos ${i < cut ? 'adv' : ''}">${i + 1}</span>${pball(t, r.id, 24)}<span class="grow t-body ell" style="font-weight:600">${esc(r.name)}</span><span class="t-sm ink-3 tnum">${r.w}–${r.l}</span><span class="num t-h3" style="min-width:24px;text-align:right">${r.pts}</span></div>`).join('')}</div>`;
     }).join('') + '</section>';
   } else if (t.bracket && L.phase(t) !== 'done') {
-    html += `<button class="link" data-act="tab" data-tab="bracket">${tr('seeBracket')}${ICON.chev}</button>`;
+    side += `<button class="link" data-act="tab" data-tab="bracket">${tr('seeBracket')}${ICON.chev}</button>`;
   }
-  return html;
+  return `<div class="ov"><div class="ov-main">${html}</div><div class="ov-side">${side}</div></div>`;
 }
 
 function tabMatches(t) {
@@ -591,6 +602,7 @@ function tabMatches(t) {
   </div>`;
   if (L.canNextSwissRound(t)) html += `<div class="feltbox hero-box"><h2 class="t-h2">${tr('roundDone', { n: t.rounds.length })}</h2><button class="btn btn-p" data-act="nextRound">${tr('makeRound', { n: t.rounds.length + 1 })}</button></div>`;
   let shown = 0;
+  html += '<div class="rounds">';
   t.rounds.forEach((r, i) => {
     const ms = r.matches.filter(keep);
     if (!ms.length) return;
@@ -602,6 +614,7 @@ function tabMatches(t) {
       ${r.byes.length && !pid ? `<div class="byes">${tr(t.format === 'swiss' ? 'byeWin' : 'sitsOut')}: <strong class="ink-2">${r.byes.map(id => esc(L.playerName(t, id))).join(', ')}</strong></div>` : ''}
     </section>`;
   });
+  html += '</div>';
   if (t.format === 'swiss' && t.rounds.length < t.settings.swissRounds && !L.canNextSwissRound(t)) {
     html += `<p class="t-sm ink-3 center">${tr('swissLater', { n: t.settings.swissRounds - t.rounds.length })}</p>`;
   }
@@ -661,9 +674,9 @@ function matrix(t, ids) {
 function tabTable(t) {
   const rules = tr('tiebreak' + (t.format === 'swiss' ? 'Swiss' : t.settings.ballCount ? 'Balls' : ''), { p: t.settings.pointsPerWin });
   if (t.format === 'groups') {
-    return t.groups.map(g => `<section class="stack"><div class="sec"><span class="t-over">${tr('groupN', { g: g.name })}</span></div>${standingsTable(t, L.standingsFor(t, g.players), t.settings.advance, tr('playoff'))}</section>`).join('') +
+    return `<div class="duo">${t.groups.map(g => `<section class="stack"><div class="sec"><span class="t-over">${tr('groupN', { g: g.name })}</span></div>${standingsTable(t, L.standingsFor(t, g.players), t.settings.advance, tr('playoff'))}</section>`).join('')}</div>` +
       `<p class="t-sm ink-3">${rules} ${tr('qualifyGroups', { n: t.settings.advance })}</p>` +
-      t.groups.map(g => `<section class="stack"><div class="sec"><span class="t-over">${tr('resultsGroup', { g: g.name })}</span></div>${matrix(t, g.players)}</section>`).join('');
+      `<div class="duo">${t.groups.map(g => `<section class="stack"><div class="sec"><span class="t-over">${tr('resultsGroup', { g: g.name })}</span></div>${matrix(t, g.players)}</section>`).join('')}</div>`;
   }
   const cut = L.hasPlayoff(t) ? L.playoffCount(t.format, t.players.length, t.settings) : 0;
   return standingsTable(t, L.standingsFor(t), cut, tr('playoff')) +
@@ -742,7 +755,7 @@ function tabStats(t) {
 
 function tabManage(t) {
   const s = t.settings;
-  return `<section class="stack">
+  return `<div class="duo"><div class="stack" style="gap:20px"><section class="stack">
       <div class="sec"><span class="t-over">${tr('tournament')}</span></div>
       <div class="field"><input id="m-name" value="${esc(t.name)}" maxlength="60" aria-label="${tr('tName')}"></div>
       <span class="lbl" style="margin:4px 0 0">${tr('renamePlayers')}</span>
@@ -758,8 +771,8 @@ function tabManage(t) {
         ${optRow(tr('ballCount'), tr('ballCountHint', { n: L.maxBalls(t.game) }), switchBtn(s.ballCount, 'data-act="toggleSetting" data-field="ballCount"', tr('ballCount')))}
       </div>
       <p class="t-xs ink-3">${tr('racesFixed', { a: s.raceTo, b: s.koRace, c: s.finalRace })}</p>
-    </section>
-    <section class="stack">
+    </section></div>
+    <div class="stack" style="gap:20px"><section class="stack">
       <div class="sec"><span class="t-over">${tr('shareBackup')}</span></div>
       <p class="t-sm ink-2">${tr('shareBackupHint')}</p>
       <div class="row wrap">
@@ -775,7 +788,7 @@ function tabManage(t) {
       </div>
       <p class="t-xs ink-3">${tr('againHint')}</p>
       <button class="btn btn-d" data-act="deleteT">${ICON.trash}<span>${tr('deleteT')}</span></button>
-    </section>`;
+    </section></div></div>`;
 }
 
 // ---------- Match screen: the table ----------
@@ -807,10 +820,19 @@ function viewMatch(t, mid) {
       <span class="hint">${done ? (id === w ? tr('winner') : '&nbsp;') : tr('tapFrame')}</span>
     </button>`;
   };
-  const sights = [12.5, 25, 37.5, 62.5, 75, 87.5].map(p => `<span class="sight" style="left:4px;top:calc(${p}% - 3.5px)"></span><span class="sight" style="right:4px;top:calc(${p}% - 3.5px)"></span>`).join('')
-    + [25, 50, 75].map(p => `<span class="sight" style="top:4px;left:calc(${p}% - 3.5px)"></span><span class="sight" style="bottom:4px;left:calc(${p}% - 3.5px)"></span>`).join('');
-  const pockets = [['-11px', '-11px', null, null], ['-11px', null, null, '-11px'], [null, '-11px', '-11px', null], [null, null, '-11px', '-11px'], ['calc(50% - 15px)', '-17px', null, null], ['calc(50% - 15px)', null, null, '-17px']]
-    .map(([top, left, bottom, right]) => `<span class="pocket" style="${top ? `top:${top};` : ''}${left ? `left:${left};` : ''}${bottom ? `bottom:${bottom};` : ''}${right ? `right:${right};` : ''}"></span>`).join('');
+  // A phone shows the table standing up (long rails left and right); a computer shows it lying down.
+  // Both sets of sights and side pockets are drawn, and CSS shows the set that fits.
+  const long = [12.5, 25, 37.5, 62.5, 75, 87.5], short = [25, 50, 75];
+  const sight = (cls, pos) => `<span class="sight ${cls}" style="${pos}"></span>`;
+  const sights =
+    long.map(p => sight('po', `left:4px;top:calc(${p}% - 3.5px)`) + sight('po', `right:4px;top:calc(${p}% - 3.5px)`)).join('') +
+    short.map(p => sight('po', `top:4px;left:calc(${p}% - 3.5px)`) + sight('po', `bottom:4px;left:calc(${p}% - 3.5px)`)).join('') +
+    long.map(p => sight('la', `top:4px;left:calc(${p}% - 3.5px)`) + sight('la', `bottom:4px;left:calc(${p}% - 3.5px)`)).join('') +
+    short.map(p => sight('la', `left:4px;top:calc(${p}% - 3.5px)`) + sight('la', `right:4px;top:calc(${p}% - 3.5px)`)).join('');
+  const pocket = (cls, pos) => `<span class="pocket ${cls}" style="${pos}"></span>`;
+  const pockets = pocket('', 'top:-11px;left:-11px') + pocket('', 'top:-11px;right:-11px') + pocket('', 'bottom:-11px;left:-11px') + pocket('', 'bottom:-11px;right:-11px') +
+    pocket('po', 'top:calc(50% - 15px);left:-17px') + pocket('po', 'top:calc(50% - 15px);right:-17px') +
+    pocket('la', 'left:calc(50% - 15px);top:-17px') + pocket('la', 'left:calc(50% - 15px);bottom:-17px');
 
   let banner = '';
   if (done) {
@@ -838,10 +860,12 @@ function viewMatch(t, mid) {
       <span class="tools">${ballsTag}${br}</span></div>`;
   }).join('');
 
-  return header({ back: backTo, title: ctxLabel(t, m), sub: `${t.name} · ${tr('raceShort', { n: race })}` }) + `<main class="page tight match-page">
+  return header({ back: backTo, title: ctxLabel(t, m), sub: `${t.name} · ${tr('raceShort', { n: race })}` }) + `<main class="page tight match-page match-grid">
+    <div class="match-main">
     ${tables}
     <div class="table">${sights}<div class="felt">${pockets}<div class="halves">${half('a', a)}${half('b', b)}</div></div></div>
-    ${done ? banner : `<p class="t-sm ink-3 center">${frames.length ? tr('tapHint') : tr('tapHintFirst')}</p>`}
+    </div><div class="match-side">
+    ${done ? banner : `<p class="t-sm ink-3 center">${frames.length ? tr('tapHint') : tr('tapHintFirst')}</p><p class="t-xs ink-3 center desk-only">${tr('keysMatch')}</p>`}
     <div class="acts">
       <button class="act ${frames.length ? '' : 'off'}" data-act="undo">${ICON.undo}<span>${tr('undo')}</span></button>
       <button class="act" data-act="quickResult">${ICON.edit}<span>${tr('enterResultShort')}</span></button>
@@ -849,6 +873,7 @@ function viewMatch(t, mid) {
       <button class="act warn ${m.startedAt || done ? '' : 'off'}" data-act="resetMatch">${ICON.trash}<span>${tr('resetShort')}</span></button>
     </div>
     ${frames.length ? `<section class="stack"><div class="sec"><span class="t-over">${tr('frames')}</span><span class="t-xs ink-3 tnum">${frames.length}</span></div><div class="card">${log}</div></section>` : ''}
+    </div>
   </main>`;
 }
 
@@ -1331,7 +1356,28 @@ document.addEventListener('click', e => {
   if (fn) { e.preventDefault(); e.stopPropagation(); fn(el, e); }
 });
 
+/** Keyboard on the match screen: arrows score, Backspace undoes, digits answer the balls-left sheet. */
+function matchKeys(e) {
+  if (route.name !== 'match' || e.ctrlKey && e.key !== 'z' || e.altKey) return false;
+  if (e.target.matches('input, textarea, select')) return false;
+  const click = sel => { const b = document.querySelector(sel); if (b && !b.disabled && !b.classList.contains('off')) { b.click(); return true; } return false; };
+  const modal = $('#modal');
+  if (modal.open) {
+    if (!modal.querySelector('.picks')) return false;
+    if (/^[0-9]$/.test(e.key)) return click(`.pick[data-n="${e.key}"]`);
+    if (e.key === 'b' || e.key === 'B') return click('[data-act=pickBlack]');
+    if (e.key === 's' || e.key === 'S') return click('[data-act=skipBalls]');
+    return false;
+  }
+  if (e.key === 'ArrowLeft') return click('.half[data-side=a]');
+  if (e.key === 'ArrowRight') return click('.half[data-side=b]');
+  if (e.key === 'Backspace' || ((e.ctrlKey || e.metaKey) && e.key === 'z')) return click('[data-act=undo]');
+  if (e.key === 'r' || e.key === 'R') return click('[data-act=quickResult]');
+  return false;
+}
+
 document.addEventListener('keydown', e => {
+  if (matchKeys(e)) { e.preventDefault(); return; }
   const el = e.target;
   if ((e.key === 'Enter' || e.key === ' ') && el.matches('[role="button"][data-act]')) {
     e.preventDefault();
