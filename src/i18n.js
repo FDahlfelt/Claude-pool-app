@@ -318,6 +318,21 @@ const da = {
   colFrameDiffLong: 'Frame-difference',
   tiebreakBalls: 'En sejr giver {p} point. Ved pointlighed tæller frame-difference, derefter kugle-difference (modstandernes kugler tilbage minus dine egne), derefter flest vundne frames og til sidst indbyrdes opgør.',
   stBlacks: 'Sorte for tidligt',
+  fmtShort_league: 'alle mødes',
+  fmtShort_groups: 'grupper + slutspil',
+  fmtShort_swiss: 'faste runder',
+  fmtShort_knockout: 'taber er ude',
+  scheduleLbl: 'Kampprogram',
+  matchesWord: 'kampe',
+  seeAll: 'Se alle',
+  breakTag: 'BREAK',
+  tapFrame: 'Tryk for frame',
+  bestOf: 'bedst af {n}',
+  leftLbl: 'tilbage',
+  enterResultShort: 'Resultat',
+  resetShort: 'Nulstil',
+  eventsN: '{n} turn.',
+  ranking: 'Rangliste',
 };
 
 const en = {
@@ -633,6 +648,21 @@ const en = {
   colFrameDiffLong: 'Frame difference',
   tiebreakBalls: 'A win is worth {p} point(s). Ties are split by frame difference, then ball difference (opponents’ balls left minus your own), then frames won, then head-to-head.',
   stBlacks: 'Early blacks',
+  fmtShort_league: 'everyone meets',
+  fmtShort_groups: 'groups + playoff',
+  fmtShort_swiss: 'fixed rounds',
+  fmtShort_knockout: 'lose and out',
+  scheduleLbl: 'Schedule',
+  matchesWord: 'matches',
+  seeAll: 'See all',
+  breakTag: 'BREAK',
+  tapFrame: 'Tap for frame',
+  bestOf: 'best of {n}',
+  leftLbl: 'left',
+  enterResultShort: 'Result',
+  resetShort: 'Reset',
+  eventsN: '{n} events',
+  ranking: 'Ranking',
 };
 
 const dicts = { da, en };

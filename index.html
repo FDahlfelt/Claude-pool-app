@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Pool Turnering</title>
 <meta name="description" content="Gratis app til pool-turneringer: kampprogram, live scoring, stilling, slutspil og statistik. Free pool tournament app.">
-<meta name="theme-color" content="#0b211a">
+<meta name="theme-color" content="#050F0A">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Pool">
@@ -14,13 +14,13 @@
 <link rel="apple-touch-icon" href="icons/icon-180.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Figtree:wght@400;500;600;700;800&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wdth,wght@12..96,75..100,400..800&family=Figtree:wght@400..800&display=swap">
 <link rel="stylesheet" href="styles.css">
 </head>
-<body>
+<body class="app" data-theme="auto">
 <div id="app"></div>
 <dialog id="modal" aria-label="Dialog"></dialog>
-<div id="toast" role="status" aria-live="polite"></div>
+<div id="toast-host" aria-live="polite"></div>
 <canvas id="confetti" hidden aria-hidden="true"></canvas>
 <noscript><p style="padding:16px">Appen kræver JavaScript. / This app needs JavaScript.</p></noscript>
 <script type="module" src="src/app.js"></script>

@@ -54,4 +54,6 @@ konvertering af turneringer fra den første version af appen.
 | `src/store.js` | Lagring i `localStorage` og konvertering af gamle data |
 | `src/share.js` | Turneringskoder (komprimeret JSON) og tekst til deling |
 | `src/i18n.js` | Tekster på dansk og engelsk |
+| `styles.css` | Designet: UI-kittet fra Claude Design (afsnit 1–20) + appens layout |
+| `design/pool-ui-kit.css` | Det originale UI-kit, uændret, som reference |
 | `sw.js`, `manifest.webmanifest` | Offline-understøttelse og installation |
