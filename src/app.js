@@ -2,6 +2,7 @@ import * as L from './logic.js';
 import { db, load, save, getTournament, upsertTournament, removeTournament, clearAll } from './store.js';
 import { tr, setLang, getLang, LANGS } from './i18n.js';
 import { encode, decode, isTournament, summaryText } from './share.js';
+import * as Live from './live.js';
 
 const VERSION = '2.2.0';
 const $ = (s, el = document) => el.querySelector(s);
@@ -103,7 +104,11 @@ function render() {
     html = viewNew();
   } else if (r.name === 't' || r.name === 'match') {
     const t = getTournament(r.id);
-    if (!t) { route = { name: 'home' }; return render(); }
+    if (!t) {
+      route = { name: 'home' };
+      try { history.replaceState(null, '', '#/'); } catch { /* sandboxed */ }
+      return render();
+    }
     html = r.name === 'match' ? viewMatch(t, r.mid) : viewTournament(t, r.tab);
   } else if (r.name === 'players') html = viewPlayers();
   else if (r.name === 'settings') html = viewSettings();
@@ -123,7 +128,57 @@ function commit(t) {
   L.syncBracket(t.bracket);
   if (!upsertTournament(t)) toast(tr('saveFailed'));
   render();
+  return t.live ? Live.push(t) : Promise.resolve(true);
 }
+
+// ---------- Live sharing ----------
+let liveError = null;
+const deferredLive = new Map(); // snapshots held back while this device is still sending
+
+function applyLive(st) {
+  const local = getTournament(st.id);
+  st.celebrated = local?.celebrated ?? false;
+  upsertTournament(st);
+}
+
+function onLive(ev) {
+  if (ev.error) { liveError = ev.error; scheduleRender(); return; }
+  if (ev.settled) {
+    const st = deferredLive.get(ev.settled);
+    if (st) { deferredLive.delete(ev.settled); applyLive(st); scheduleRender(); }
+    return;
+  }
+  liveError = null;
+  const hidden = new Set(db.prefs.hiddenLive || []);
+  for (const st of ev.tournaments) {
+    if (hidden.has(st.id)) continue;
+    // Our own unsent change wins until it has been written; the next snapshot includes it.
+    if (Live.isPending(st.id)) deferredLive.set(st.id, st);
+    else applyLive(st);
+  }
+  // Deleted for everyone (or stopped by its owner): it leaves this device too.
+  const gone = new Set(ev.removed);
+  if (ev.complete) {
+    const onServer = new Set(ev.ids);
+    for (const t of db.tournaments) if (t.live && !onServer.has(t.id) && !Live.isPending(t.id)) gone.add(t.id);
+  }
+  for (const id of gone) if (getTournament(id)?.live && !Live.isPending(id)) removeTournament(id);
+  scheduleRender();
+}
+
+/** Re-render for remote changes, but never under someone's fingers while they type. */
+let renderDirty = false;
+function scheduleRender() {
+  const a = document.activeElement;
+  if (a && $('#app').contains(a) && a.matches('input, textarea, select')) { renderDirty = true; return; }
+  render();
+}
+document.addEventListener('focusout', () => setTimeout(() => {
+  if (renderDirty && !document.activeElement?.matches?.('input, textarea, select')) { renderDirty = false; render(); }
+}, 0));
+
+const readOnlyNow = () => !!curT()?.live && !Live.isWritable();
+const liveBadge = t => !t.live ? '' : `<span class="tag tag-live" title="${tr('liveTitle')}"><span class="live-dot"></span>${Live.isWritable() ? tr('liveTag') : tr('viewOnly')}</span>`;
 
 function header({ back, title, sub, actions = '' }) {
   return `<header class="hdr">
@@ -194,7 +249,7 @@ function tCard(t) {
       <div class="ttl grow"><div class="t-h3 ell">${esc(t.name)}</div><div class="t-xs ink-3 ell">${tr('nPlayers', { n: t.players.length })} · ${fmtName(t.format)}</div></div>
       <button class="iconbtn danger" data-act="deleteFromHome" data-id="${t.id}" aria-label="${tr('deleteNamed', { name: esc(t.name) })}" title="${tr('deleteT')}">${ICON.trash}</button>
     </div>
-    <div class="row wrap">${status}${t.demo ? `<span class="tag tag-demo">Demo</span>` : ''}</div>
+    <div class="row wrap">${status}${t.live ? `<span class="tag tag-live"><span class="live-dot"></span>${tr('liveTag')}</span>` : ''}${t.demo ? `<span class="tag tag-demo">Demo</span>` : ''}</div>
     ${progressBar(done, total, pod ? 'gold thin' : 'thin')}
     <div class="tc-foot t-xs ink-3 tnum"><span>${tr('matchesOf', { done, total })}</span><span>${relTime(t.updatedAt)}</span></div>
   </div>`;
@@ -474,9 +529,9 @@ function viewTournament(t, tab) {
   if (!tabs.some(([k]) => k === tab)) tab = 'overview';
   const sub = `${fmtName(t.format)} · ${tr('nPlayers', { n: t.players.length })} · ${tr('game_' + t.game)}`;
   const body = { overview: tabOverview, matches: tabMatches, table: tabTable, bracket: tabBracket, stats: tabStats, manage: tabManage }[tab](t);
-  return `<div class="hdr-wrap">${header({ back: '#/', title: t.name, sub, actions: `<button class="iconbtn" data-act="share" aria-label="${tr('share')}">${ICON.share}</button>` })}
+  return `<div class="hdr-wrap">${header({ back: '#/', title: t.name, sub, actions: `${liveBadge(t)}<button class="iconbtn" data-act="share" aria-label="${tr('share')}">${ICON.share}</button>` })}
     <nav class="tabs" aria-label="${esc(t.name)}">${tabs.map(([k, l]) => `<button class="${k === tab ? 'on' : ''}" data-act="tab" data-tab="${k}" ${k === tab ? 'aria-current="page"' : ''}>${l}</button>`).join('')}</nav></div>
-    <main class="page tight">${t.demo ? `<div class="note">${tr('demoNote')}</div>` : ''}${body}</main>`;
+    <main class="page tight">${t.demo ? `<div class="note">${tr('demoNote')}</div>` : ''}${t.live && liveError ? `<div class="note warn-note">${tr('liveError')}</div>` : ''}${body}</main>`;
 }
 
 function currentRound(t) {
@@ -772,7 +827,7 @@ function tabManage(t) {
       </div>
       <p class="t-xs ink-3">${tr('racesFixed', { a: s.raceTo, b: s.koRace, c: s.finalRace })}</p>
     </section></div>
-    <div class="stack" style="gap:20px"><section class="stack">
+    <div class="stack" style="gap:20px">${liveSection(t)}<section class="stack">
       <div class="sec"><span class="t-over">${tr('shareBackup')}</span></div>
       <p class="t-sm ink-2">${tr('shareBackupHint')}</p>
       <div class="row wrap">
@@ -791,6 +846,20 @@ function tabManage(t) {
     </section></div></div>`;
 }
 
+function liveSection(t) {
+  if (!Live.isAvailable() && !t.live) return '';
+  const w = Live.isWritable();
+  let body;
+  if (t.live) {
+    body = `<p class="t-sm ink-2">${tr('liveOnHint')}</p><p class="t-xs ink-3">${tr('liveHowTo')}</p>
+      ${w && Live.isAvailable() ? `<button class="btn btn-s" data-act="stopLive">${tr('stopLive')}</button>` : ''}`;
+  } else {
+    body = `<p class="t-sm ink-2">${tr('liveOffHint')}</p><p class="t-xs ink-3">${tr('liveHowTo')}</p>
+      ${w ? `<button class="btn btn-p" data-act="goLive"><span class="live-dot" style="background:currentColor"></span><span>${tr('goLive')}</span></button>` : `<p class="t-sm warn">${tr('readOnlyLive')}</p>`}`;
+  }
+  return `<section class="stack"><div class="sec"><span class="t-over">${tr('liveTitle')}</span>${liveBadge(t)}</div><div class="card pad">${body}</div></section>`;
+}
+
 // ---------- Match screen: the table ----------
 function viewMatch(t, mid) {
   const info = L.matchInfo(t, mid);
@@ -801,6 +870,7 @@ function viewMatch(t, mid) {
   const { m, race } = info;
   const [a, b] = L.score(m);
   const done = L.isDone(m);
+  const ro = !!t.live && !Live.isWritable(); // watching a live tournament without write access
   const frames = m.frames || [];
   const nextBreak = done ? null : L.breakerFor(m, frames.length, t.settings.breakRule);
   const w = L.winnerOf(m);
@@ -810,14 +880,14 @@ function viewMatch(t, mid) {
     const popped = ui.pop === s;
     // Race diamonds: the sight markers on a real rail, lit per frame won.
     const dias = range(1, Math.min(race, 11)).map(i => `<span class="dia ${i <= val ? (done && id === w ? 'gold' : 'on') : ''}"></span>`).join('');
-    return `<button class="half ${state}" data-act="frame" data-side="${s}" ${done ? 'disabled' : ''} aria-label="${tr('addFrameFor', { name: L.playerName(t, id) })}">
+    return `<button class="half ${state}" data-act="frame" data-side="${s}" ${done || ro ? 'disabled' : ''} aria-label="${tr('addFrameFor', { name: L.playerName(t, id) })}">
       <span class="lamp"></span>
       <span class="brk-tag">${cue(18)}${tr('breakTag')}</span>
       <span class="pl">${pball(t, id, 30, 'lift')}<span class="pl-name">${pname(t, id)}</span></span>
       <span class="score"><span class="${popped ? 'pop' : ''}">${val}</span></span>
       ${popped ? '<span class="puff"></span>' : ''}
       <span class="dias">${dias}</span>
-      <span class="hint">${done ? (id === w ? tr('winner') : '&nbsp;') : tr('tapFrame')}</span>
+      <span class="hint">${done ? (id === w ? tr('winner') : '&nbsp;') : ro ? '&nbsp;' : tr('tapFrame')}</span>
     </button>`;
   };
   // A phone shows the table standing up (long rails left and right); a computer shows it lying down.
@@ -860,13 +930,13 @@ function viewMatch(t, mid) {
       <span class="tools">${ballsTag}${br}</span></div>`;
   }).join('');
 
-  return header({ back: backTo, title: ctxLabel(t, m), sub: `${t.name} · ${tr('raceShort', { n: race })}` }) + `<main class="page tight match-page match-grid">
+  return header({ back: backTo, title: ctxLabel(t, m), sub: `${t.name} · ${tr('raceShort', { n: race })}`, actions: liveBadge(t) }) + `<main class="page tight match-page match-grid">
     <div class="match-main">
     ${tables}
     <div class="table">${sights}<div class="felt">${pockets}<div class="halves">${half('a', a)}${half('b', b)}</div></div></div>
     </div><div class="match-side">
-    ${done ? banner : `<p class="t-sm ink-3 center">${frames.length ? tr('tapHint') : tr('tapHintFirst')}</p><p class="t-xs ink-3 center desk-only">${tr('keysMatch')}</p>`}
-    <div class="acts">
+    ${done ? banner : ro ? `<p class="t-sm ink-3 center">${tr('readOnlyLive')}</p>` : `<p class="t-sm ink-3 center">${frames.length ? tr('tapHint') : tr('tapHintFirst')}</p><p class="t-xs ink-3 center desk-only">${tr('keysMatch')}</p>`}
+    <div class="acts ${ro ? 'hide' : ''}">
       <button class="act ${frames.length ? '' : 'off'}" data-act="undo">${ICON.undo}<span>${tr('undo')}</span></button>
       <button class="act" data-act="quickResult">${ICON.edit}<span>${tr('enterResultShort')}</span></button>
       <button class="act ${!frames.length && !done ? '' : 'off'}" data-act="swapBreak">${ICON.swap}<span>${tr('swapBreak')}</span></button>
@@ -1063,7 +1133,15 @@ function importDialog() {
 
 async function shareDialog(t) {
   const text = summaryText(t, tr);
-  openSheet(`<div class="grab"></div><h3 class="t-h2">${tr('share')}</h3>
+  const live = Live.isAvailable() || t.live
+    ? `<section class="feltbox hero-box" style="margin-top:14px;padding:16px;gap:8px">
+        <span class="t-over">${tr('liveTitle')}</span>
+        <p class="t-sm">${t.live ? tr('liveOnHint') : tr('liveOffHint')}</p>
+        ${!t.live && Live.isWritable() ? `<button class="btn btn-p btn-sm" data-act="goLive">${tr('goLive')}</button>` : ''}
+        <p class="t-xs" style="color:var(--ink-2)">${tr('liveHowTo')}</p>
+      </section>`
+    : '';
+  openSheet(`<div class="grab"></div><h3 class="t-h2">${tr('share')}</h3>${live}
     <section class="stack" style="margin-top:14px">
       <span class="t-over">${tr('shareTextTitle')}</span>
       <pre class="card-2 mono t-xs" id="shText" style="padding:12px;white-space:pre-wrap;max-height:200px;overflow:auto;margin:0">${esc(text)}</pre>
@@ -1182,6 +1260,18 @@ function confetti() {
     else { ctx.clearRect(0, 0, innerWidth, innerHeight); c.hidden = true; }
   };
   requestAnimationFrame(step);
+}
+
+/** Deletes on this device; a live tournament is deleted for everyone by someone who may write. */
+async function deleteTournament(t) {
+  if (!t) return false;
+  const forAll = t.live && Live.isAvailable() && Live.isWritable();
+  if (!(await ask(tr(forAll ? 'confirmDeleteLive' : 'confirmDelete', { name: t.name }), tr('deleteT')))) return false;
+  if (forAll) await Live.remove(t.id);
+  else if (t.live) { db.prefs.hiddenLive = [...new Set([...(db.prefs.hiddenLive || []), t.id])]; save(); }
+  removeTournament(t.id);
+  toast(tr('deleted'));
+  return true;
 }
 
 // ---------- Events ----------
@@ -1320,18 +1410,30 @@ const actions = {
   rematch: () => { draft = newDraft(curT()); go({ name: 'new' }); },
   changeFormat: () => { draft = newDraft(curT(), true); go({ name: 'new' }); toast(tr('changeFormatHint')); },
   deleteT: async () => {
-    const t = curT();
-    if (!(await ask(tr('confirmDelete', { name: t.name }), tr('deleteT')))) return;
-    removeTournament(t.id);
-    go({ name: 'home' });
-    toast(tr('deleted'));
+    if (await deleteTournament(curT())) go({ name: 'home' });
   },
   deleteFromHome: async el => {
-    const t = getTournament(el.dataset.id);
-    if (!t || !(await ask(tr('confirmDelete', { name: t.name }), tr('deleteT')))) return;
-    removeTournament(t.id);
+    if (await deleteTournament(getTournament(el.dataset.id))) render();
+  },
+  goLive: async () => {
+    closeModal();
+    const t = curT();
+    if (Live.stable(Live.toShared(t)).length > 240000) return toast(tr('liveTooBig'));
+    t.live = true;
+    db.prefs.hiddenLive = (db.prefs.hiddenLive || []).filter(id => id !== t.id);
+    save();
+    const ok = await commit(t);
+    if (!ok) { t.live = false; upsertTournament(t); render(); }
+    toast(ok ? tr('liveOn') : tr('liveFailed'));
+  },
+  stopLive: async () => {
+    const t = curT();
+    if (!(await ask(tr('confirmStopLive'), tr('stopLive')))) return;
+    // Mark it local first, so the deletion arriving from the server doesn't take our own copy.
+    t.live = false;
+    upsertTournament(t);
     render();
-    toast(tr('deleted'));
+    await Live.remove(t.id);
   },
 
   pref: el => {
@@ -1349,9 +1451,15 @@ const actions = {
   playerCard: el => playerCard(el.dataset.name),
 };
 
+// Actions that change a tournament; blocked for people who may only watch a live tournament.
+const MUTATING = new Set(['startMatch', 'frame', 'undo', 'swapBreak', 'toggleBR', 'setTable', 'quickResult', 'resetMatch',
+  'editBalls', 'pickBalls', 'pickBlack', 'skipBalls', 'nextRound', 'startPlayoff', 'resetPlayoff', 'saveNames',
+  'stepSetting', 'setSetting', 'toggleSetting', 'changeFormat', 'goLive', 'stopLive', 'walkover', 'withdraw']);
+
 document.addEventListener('click', e => {
   const el = e.target.closest('[data-act]');
   if (!el || el.disabled || el.classList.contains('off')) return;
+  if (MUTATING.has(el.dataset.act) && readOnlyNow()) { e.preventDefault(); toast(tr('readOnlyLive')); return; }
   const fn = actions[el.dataset.act];
   if (fn) { e.preventDefault(); e.stopPropagation(); fn(el, e); }
 });
@@ -1417,3 +1525,5 @@ window.addEventListener('storage', e => {
 matchMedia('(prefers-color-scheme: dark)').addEventListener?.('change', () => applyTheme());
 
 render();
+// Inside the Claude viewer this connects to the shared database; elsewhere it resolves false.
+Live.init(onLive).then(on => { if (on) render(); });

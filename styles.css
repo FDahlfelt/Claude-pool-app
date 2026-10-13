@@ -834,3 +834,5 @@ button.bk{ display:block; width:100%; text-align:left; }
 }
 .logr{ grid-template-columns:30px minmax(72px, 1fr) auto; padding-top:6px; padding-bottom:6px; }
 .logr .tools{ flex-wrap:wrap; justify-content:flex-end; row-gap:4px; }
+.warn-note{ background:var(--danger-soft); color:var(--ink); }
+.hdr .tag{ flex:none; }
