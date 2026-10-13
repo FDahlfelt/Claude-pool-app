@@ -5,7 +5,7 @@ import { encode, decode, isTournament, summaryText } from './share.js';
 import * as Live from './live.js';
 import { renderCard } from './card.js';
 
-const VERSION = '2.4.1';
+const VERSION = '2.4.2';
 const $ = (s, el = document) => el.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const pct = x => Math.round(x * 100) + '%';
@@ -801,7 +801,6 @@ function tabBracket(t) {
   return html;
 }
 
-/** Double knockout: the winners' side, the losers' side and the grand final. */
 /** Bracket rounds as scrollable columns; shared by the single and the double knockout views. */
 function bracketColumns(t, rounds, { name, race, isFinal = () => false, after = () => '' }) {
   return `<div class="bracket-scroll"><div class="bracket-grid" style="--cols:${rounds.length}">${rounds.map((ms, r) =>
@@ -809,6 +808,7 @@ function bracketColumns(t, rounds, { name, race, isFinal = () => false, after = 
       <div class="brk-body">${ms.filter(m => m.a !== L.NONE).map(m => bmatch(t, m, isFinal(r))).join('')}${after(r)}</div></div>`).join('')}</div></div>`;
 }
 
+/** Double knockout: the winners' side, the losers' side and the grand final. */
 function doubleBracket(t) {
   const br = t.bracket, R = br.rounds, Lo = br.lower;
   const ko = () => t.settings.koRace;
@@ -847,10 +847,10 @@ function tabStats(t) {
   }
   return `<div class="kpis">${kpis.map(([k, v, s]) => `<div class="kpi"><span class="t-over">${k}</span><span class="v">${v}</span>${s ? `<span class="t-xs">${s}</span>` : ''}</div>`).join('')}</div>
     <div class="card tbl-wrap"><table class="st">
-      <thead><tr><th class="l">${tr('player')}</th><th>${tr('colP')}</th><th>${tr('colW')}–${tr('colL')}</th><th class="l">${tr('winPct')}</th><th class="hide-xs">${tr('framePct')}</th><th title="${tr('streakLong')}">${tr('streak')}</th>${balls ? `<th title="${tr('colBallsLong')}">${tr('colBalls')}</th>` : ''}<th title="Break &amp; run">B&amp;R</th></tr></thead>
+      <thead><tr><th class="l">${tr('player')}</th><th>${tr('colP')}</th><th>${tr('colW')}–${tr('colL')}</th><th class="l">${tr('winPct')}</th><th class="hide-xs">${tr('framePct')}</th><th class="hide-xs" title="${tr('streakLong')}">${tr('streak')}</th>${balls ? `<th title="${tr('colBallsLong')}"><span class="hide-xs">${tr('colBalls')}</span><span class="xs-only">${tr('colBallsShort')}</span></th>` : ''}<th title="Break &amp; run">B&amp;R</th></tr></thead>
       <tbody>${players.map(r => `<tr><td class="l nm"><div class="row">${pball(t, r.id, 22)}<span class="ell">${esc(r.name)}</span></div></td><td>${r.p}</td><td>${r.w}–${r.l}</td>
         <td class="l"><span class="pbar"><i style="width:${pct(r.winPct)}"></i></span>${pct(r.winPct)}</td>
-        <td class="hide-xs">${pct(r.framePct)}</td><td>${r.best}</td>${balls ? `<td>${sign(r.bdiff)}</td>` : ''}<td>${r.br}</td></tr>`).join('')}</tbody>
+        <td class="hide-xs">${pct(r.framePct)}</td><td class="hide-xs">${r.best}</td>${balls ? `<td>${sign(r.bdiff)}</td>` : ''}<td>${r.br}</td></tr>`).join('')}</tbody>
     </table></div>
     <p class="t-sm ink-3">${tr('brHint')}</p>`;
 }
@@ -936,7 +936,7 @@ function viewMatch(t, mid) {
       <span class="pl">${pball(t, id, 30, 'lift')}<span class="pl-name">${pname(t, id)}</span></span>
       <span class="score"><span class="${popped ? 'pop' : ''}">${val}</span></span>
       ${popped ? '<span class="puff"></span>' : ''}
-      <span class="dias">${dias}</span>
+      <span class="dias" style="--n:${Math.min(race, 11)}">${dias}</span>
       <span class="hint">${done ? (id === w ? tr('winner') : '&nbsp;') : ro ? '&nbsp;' : tr('tapFrame')}</span>
     </button>`;
   };
@@ -1061,14 +1061,17 @@ function quickResult(t, m, race) {
     }
     draw();
   };
-  $('#qrSave').addEventListener('click', () => {
+  $('#qrSave').addEventListener('click', async () => {
     if (!L.validScore(a, b, race)) return;
     const [fa, fb] = L.score({ frames: m.frames });
     const [oa, ob] = L.ballsLeft(m);
     // Keep per-frame ball counts when the frames already add up to this result.
     const keepFrames = fa === a && fb === b && oa === la && ob === lb;
-    L.setResult(t, m, a, b, useBalls && !keepFrames ? [la, lb] : undefined);
+    const save = (tt, mm) => L.setResult(tt, mm, a, b, useBalls && !keepFrames ? [la, lb] : undefined);
+    const lost = L.laterLost(t, m, save);
     closeModal();
+    if (lost && !(await ask(tr('confirmLaterLost', { n: lost }), tr('save')))) return;
+    save(t, m);
     afterResult(t, m);
   });
 }
@@ -1550,7 +1553,13 @@ const actions = {
   pickBalls: el => { const t = curT(); L.setFrameBalls(t, curMatch(), +el.dataset.i, +el.dataset.n); closeModal(); commit(t); },
   pickBlack: el => { const t = curT(); L.setFrameBalls(t, curMatch(), +el.dataset.i, null, true); closeModal(); commit(t); },
   skipBalls: el => { const t = curT(); L.setFrameBalls(t, curMatch(), +el.dataset.i, null); closeModal(); commit(t); },
-  undo: () => { const t = curT(); L.undoFrame(t, curMatch()); commit(t); },
+  undo: async () => {
+    const t = curT(), m = curMatch();
+    const lost = L.laterLost(t, m, L.undoFrame);
+    if (lost && !(await ask(tr('confirmLaterLost', { n: lost }), tr('undo')))) return;
+    L.undoFrame(t, m);
+    commit(t);
+  },
   swapBreak: () => { const t = curT(); const m = curMatch(); m.firstBreak = (m.firstBreak || 'a') === 'a' ? 'b' : 'a'; commit(t); },
   toggleBR: el => { const t = curT(); const f = curMatch().frames[+el.dataset.i]; f.br = !f.br; commit(t); },
   setTable: el => { const t = curT(); curMatch().table = +el.dataset.n; commit(t); },
@@ -1577,7 +1586,8 @@ const actions = {
   },
   resetMatch: async () => {
     const t = curT();
-    if (!(await ask(tr('confirmResetMatch'), tr('resetMatch')))) return;
+    const lost = L.laterLost(t, curMatch(), L.clearMatch);
+    if (!(await ask(tr('confirmResetMatch') + (lost ? ' ' + tr('confirmLaterLost', { n: lost }) : ''), tr('resetMatch')))) return;
     L.clearMatch(t, curMatch());
     commit(t);
   },

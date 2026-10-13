@@ -359,3 +359,45 @@ test('match labels name every place in a double knockout', () => {
   assert.ok(labels.includes('wFinal') && labels.includes('lFinal') && labels.includes('grandFinal') && labels.includes('grandReset'));
   assert.ok(labels.every(Boolean));
 });
+
+test('reinstating a player keeps results they won after a walkover', () => {
+  const t = L.createTournament({ name: 'x', format: 'knockout', names: ['X', 'B', 'C', 'D', 'E', 'F', 'G', 'Y'], settings: { seeding: 'list' } });
+  const id = n => t.players.find(p => p.name === n).id;
+  L.withdrawPlayer(t, id('Y'));
+  for (const m of t.bracket.rounds[0]) if (!L.isDone(m)) L.setResult(t, m, 4, 0);
+  const qf = t.bracket.rounds[1].find(m => m.a === id('X') || m.b === id('X'));
+  L.setResult(t, qf, qf.a === id('X') ? 4 : 2, qf.a === id('X') ? 2 : 4);
+  L.withdrawPlayer(t, id('X'));
+  L.reinstatePlayer(t, id('X'));
+  assert.ok(L.isDone(qf));
+  assert.equal(L.winnerOf(qf), id('X'));
+});
+
+test('laterLost counts bracket matches an undo would wipe', () => {
+  const t = L.createTournament({ name: 'x', format: 'knockout', names: ['A', 'B', 'C', 'D'], settings: { seeding: 'list', koRace: 2, finalRace: 2 } });
+  const [s1, s2] = t.bracket.rounds[0];
+  const win = m => { while (!L.addFrame(t, m, 'a', 2)); };
+  win(s1);
+  assert.equal(L.laterLost(t, s1, L.undoFrame), 0);
+  win(s2); win(t.bracket.bronze); win(t.bracket.rounds[1][0]);
+  assert.equal(L.laterLost(t, s1, L.undoFrame), 2); // final and bronze
+  assert.ok(L.isDone(s1)); // the copy was changed, not the tournament
+});
+
+test('progress reaches 100% when a player withdrew', () => {
+  const t = L.createTournament({ name: 'x', format: 'swiss', names: names(6), settings: { swissRounds: 3, playoffSize: 0 } });
+  L.withdrawPlayer(t, t.players[0].id);
+  playAll(t);
+  const p = L.progress(t);
+  assert.equal(L.phase(t), 'done');
+  assert.equal(p.done, p.total);
+});
+
+test('Swiss uses as few rematches as possible when one is unavoidable', () => {
+  // Every cross pair is played, so the unplayed pairs form two triangles (ABC, DEF): one rematch is needed.
+  const ids = ['A', 'B', 'C', 'D', 'E', 'F'];
+  const played = new Set(['A', 'B', 'C'].flatMap(x => ['D', 'E', 'F'].map(y => `${x}|${y}`)));
+  const r = L.swissRound(ids, played);
+  const again = r.matches.filter(m => played.has([m.a, m.b].sort().join('|'))).length;
+  assert.equal(again, 1);
+});

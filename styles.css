@@ -641,7 +641,12 @@ table.st td{ padding:9px 6px; text-align:center; white-space:nowrap; font-size:1
 table.st tbody tr{ box-shadow:inset 0 1px 0 var(--line); }
 table.st .l{ text-align:left; }
 table.st td.nm{ font-weight:650; }
-table.st td.nm .row{ gap:8px; }
+table.st td.nm .row{ gap:8px; min-width:0; flex-wrap:nowrap; }
+/* Long names are shortened, so the numbers (points!) stay in view on a phone. */
+table.st td.nm{ width:100%; }
+table.st td.nm .row > .ball{ flex:none; }
+table.st td.nm .ell{ max-width:14em; }
+@media (max-width:420px){ table.st td.nm .ell{ max-width:max(3.6em, calc(100vw - 290px)); } }
 table.st td.nm .ball{ font-size:22px; }
 table.st td.p{ font-family:var(--f-display); font-stretch:85%; font-weight:760; font-size:19px; color:var(--ink); }
 table.st th:first-child, table.st td:first-child{ padding-left:14px; }
@@ -652,7 +657,7 @@ table.st tr.click{ cursor:pointer; }
 table.st tr.click:active{ background:var(--chalk-soft); }
 .pbar{ display:inline-block; width:44px; height:6px; border-radius:3px; background:var(--surface-3); margin-right:8px; vertical-align:middle; overflow:hidden; }
 .pbar i{ display:block; height:100%; background:var(--chalk); }
-@media (max-width:420px){ .hide-xs{ display:none; } table.st td, table.st th{ padding-left:4px; padding-right:4px; } }
+@media (max-width:420px){ .hide-xs, table.st .pbar{ display:none; } table.st td, table.st th{ padding-left:4px; padding-right:4px; } }
 
 /* Matrix */
 .mxg{ display:grid; gap:4px; padding:14px; min-width:max-content; }
@@ -794,7 +799,8 @@ button.bk{ display:block; width:100%; text-align:left; }
   .ov{ display:grid; grid-template-columns:minmax(0, 1.5fr) minmax(320px, 1fr); gap:28px; align-items:start; }
   .ov-side{ position:sticky; top:128px; }
   .rounds{ display:grid; grid-template-columns:repeat(auto-fill, minmax(420px, 1fr)); gap:16px; align-items:start; }
-  .duo{ display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:28px; align-items:start; }
+  /* Side by side only when each half is wide enough for a whole standings table. */
+  .duo{ display:grid; grid-template-columns:repeat(auto-fit, minmax(min(100%, 560px), 1fr)); gap:28px; align-items:start; }
   .kpis{ grid-template-columns:repeat(4, minmax(0, 1fr)); }
   .bracket-grid{ grid-template-columns:repeat(var(--cols), minmax(210px, 1fr)); gap:24px; }
   .bracket-scroll{ margin:0; padding:4px 0 8px; }
@@ -859,14 +865,15 @@ button.bk{ display:block; width:100%; text-align:left; }
    The felt is a size container, so names, scores and diamonds shrink with a small table instead of
    running past the rail. The BREAK tag floats above the content, so both halves lay out the same. */
 .felt{ container-type:size; }
-.half{ padding:clamp(30px, 13cqh, 46px) 8px clamp(8px, 5cqh, 16px); justify-content:space-evenly; gap:clamp(2px, 1.5cqh, 6px); }
-.half .brk-tag{ position:absolute; top:clamp(6px, 3cqh, 14px); left:0; right:0; margin:0 auto; width:max-content; }
+.half{ padding:40px 8px 12px; padding:clamp(30px, 13cqh, 46px) 8px clamp(8px, 5cqh, 16px); justify-content:space-evenly; gap:4px; gap:clamp(2px, 1.5cqh, 6px); }
+.half .brk-tag{ position:absolute; top:10px; top:clamp(6px, 3cqh, 14px); left:0; right:0; margin:0 auto; width:max-content; }
 .half .pl{ gap:clamp(2px, 1.5cqh, 6px); }
 .half .pl .ball{ font-size:clamp(18px, 8cqh, 30px); }
 .pl-name{ font-size:clamp(14px, 6cqh, 21px); }
 .score{ height:auto; font-size:clamp(52px, 38cqh, 152px); }
-.dias{ height:auto; gap:clamp(7px, 3cqh, 13px); }
-.dia{ width:clamp(9px, 3.2cqh, 13px); height:clamp(9px, 3.2cqh, 13px); }
+/* Up to 11 diamonds (--n) share half the felt's width, so a long race still fits a phone. */
+.dias{ height:auto; flex-wrap:wrap; max-width:100%; --fit:calc((50cqw - 48px) / (2.1 * var(--n, 5))); gap:min(clamp(7px, 3cqh, 13px), var(--fit)); }
+.dia{ width:min(clamp(9px, 3.2cqh, 13px), var(--fit)); height:min(clamp(9px, 3.2cqh, 13px), var(--fit)); }
 .half .hint{ font-size:clamp(10.5px, 3.4cqh, 12px); min-height:0; }
 
 @media (min-width:960px){

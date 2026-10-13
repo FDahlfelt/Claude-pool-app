@@ -1,6 +1,6 @@
 {
   "name": "pool-turnering",
-  "version": "2.4.1",
+  "version": "2.4.2",
   "private": true,
   "type": "module",
   "description": "Pool tournament app: schedules, live scoring, standings and playoffs. No build step.",

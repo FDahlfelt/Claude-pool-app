@@ -126,18 +126,21 @@ export function swissRound(order, played = new Set(), byeHistory = new Set()) {
     byes.push(list.splice(idx, 1)[0]);
   }
   let steps = 0;
-  const pair = rest => {
+  // `allow` = how many rematches the round may contain; we try 0 first, then as few as possible.
+  const pair = (rest, allow) => {
     if (!rest.length) return [];
     if (++steps > 20000) return null;
     const [first, ...others] = rest;
     for (let j = 0; j < others.length; j++) {
-      if (played.has(pairKey(first, others[j]))) continue;
-      const sub = pair(others.filter((_, k) => k !== j));
+      const again = played.has(pairKey(first, others[j])) ? 1 : 0;
+      if (again > allow) continue;
+      const sub = pair(others.filter((_, k) => k !== j), allow - again);
       if (sub) return [[first, others[j]], ...sub];
     }
     return null;
   };
-  let pairs = pair(list);
+  let pairs = null;
+  for (let allow = 0; !pairs && allow <= list.length / 2; allow++) { steps = 0; pairs = pair(list, allow); }
   if (!pairs) {
     pairs = [];
     for (let i = 0; i < list.length; i += 2) pairs.push([list[i], list[i + 1]]);
@@ -498,6 +501,8 @@ export function phase(t) {
 export function progress(t) {
   const real = allMatches(t).filter(m => !isBye(m));
   const done = real.filter(isDone).length;
+  // The plan assumes everyone plays to the end; withdrawals or an early playoff leave fewer matches.
+  if (phase(t) === 'done') return { done, total: done };
   if (t.format === 'double') {
     // Slots that will turn out empty aren't known yet, so count from the plan.
     const reset = t.bracket?.grand?.[1];
@@ -601,6 +606,19 @@ export function setResult(t, m, sa, sb, balls) {
   syncBracket(t.bracket);
 }
 
+/**
+ * How many other matches that are already under way or played a change to `m` would wipe,
+ * e.g. undoing a semi-final empties the final. `change(t, m)` runs on a copy.
+ */
+export function laterLost(t, m, change) {
+  if (!t.bracket) return 0;
+  const copy = JSON.parse(JSON.stringify(t));
+  change(copy, matchInfo(copy, m.id).m);
+  const after = new Map(allMatches(copy).map(x => [x.id, x]));
+  const played = x => !isBye(x) && (isDone(x) || !!x.startedAt);
+  return allMatches(t).filter(x => x.id !== m.id && played(x) && !played(after.get(x.id) || {})).length;
+}
+
 export function clearMatch(t, m) {
   Object.assign(m, { sa: null, sb: null, frames: [], startedAt: null, endedAt: null, table: null });
   delete m.balls;
@@ -649,7 +667,7 @@ export function reinstatePlayer(t, id) {
   const p = t.players.find(x => x.id === id);
   if (!p?.withdrawn) return;
   delete p.withdrawn;
-  for (const m of allMatches(t)) if (m.wo === 'withdraw' && (m.a === id || m.b === id)) clearMatch(t, m);
+  for (const m of allMatches(t)) if (m.wo === 'withdraw' && loserOf(m) === id) clearMatch(t, m);
   walkoverOpen(t); // others who withdrew keep their walkovers
 }
 
