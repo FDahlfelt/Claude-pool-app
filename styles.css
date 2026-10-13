@@ -846,3 +846,9 @@ button.bk{ display:block; width:100%; text-align:left; }
 .toast .grow{ flex:1; min-width:0; }
 .clock{ font-family:var(--f-display); font-stretch:85%; letter-spacing:.02em; font-size:13px; }
 @media (min-width:960px){ .kpis{ grid-template-columns:repeat(auto-fit, minmax(170px, 1fr)); } }
+.h2h{ display:grid; grid-template-columns:minmax(0,1fr) auto minmax(0,1fr); align-items:center; gap:8px; padding:18px 14px; }
+.h2h-side{ display:flex; flex-direction:column; align-items:center; gap:6px; min-width:0; font-weight:700; }
+.h2h-side .num{ font-size:46px; font-weight:760; line-height:1; color:var(--ink-2); }
+.h2h-side.lead .num{ color:var(--gold); }
+.h2h-vs{ font-family:var(--f-display); font-size:30px; color:var(--ink-3); }
+.field input:focus-visible, .field select:focus-visible, .field textarea:focus-visible{ outline:none; }

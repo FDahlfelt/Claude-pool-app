@@ -258,3 +258,16 @@ test('swiss pairing leaves out withdrawn players', () => {
   assert.ok(r2.matches.every(m => m.a !== gone && m.b !== gone));
   assert.ok(!r2.byes.includes(gone));
 });
+
+test('head to head adds up meetings across tournaments by name', () => {
+  const t1 = L.createTournament({ name: 'one', format: 'league', names: ['Ann', 'Bo', 'Cy'], settings: {} });
+  const t2 = L.createTournament({ name: 'two', format: 'league', names: ['bo', 'ANN', 'Di'], settings: {} });
+  const meet = (t, a, b) => L.stageMatches(t).find(m => [m.a, m.b].sort().join() === [a, b].sort().join());
+  const id = (t, n) => t.players.find(p => p.name.toLowerCase() === n).id;
+  const m1 = meet(t1, id(t1, 'ann'), id(t1, 'bo'));
+  L.setResult(t1, m1, m1.a === id(t1, 'ann') ? 3 : 1, m1.a === id(t1, 'ann') ? 1 : 3); // Ann wins 3–1
+  const m2 = meet(t2, id(t2, 'ann'), id(t2, 'bo'));
+  L.setWalkover(t2, m2, m2.a === id(t2, 'bo') ? 'a' : 'b', 3); // walkovers don't count
+  const h = L.headToHead([t1, t2], 'Ann', 'Bo');
+  assert.deepEqual([h.a.w, h.b.w, h.a.ff, h.b.ff, h.meetings.length], [1, 0, 3, 1, 1]);
+});

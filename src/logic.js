@@ -676,3 +676,25 @@ export function migrateV1(s) {
     updatedAt: Date.now(),
   };
 }
+
+/** Every played meeting between two player names across tournaments, newest first. */
+export function headToHead(tournaments, nameA, nameB) {
+  const key = s => s.trim().toLowerCase();
+  const ka = key(nameA), kb = key(nameB);
+  const out = { a: { w: 0, ff: 0 }, b: { w: 0, ff: 0 }, meetings: [] };
+  for (const t of tournaments) {
+    const idOf = k => t.players.find(p => key(p.name) === k)?.id;
+    const ia = idOf(ka), ib = idOf(kb);
+    if (!ia || !ib) continue;
+    for (const m of allMatches(t)) {
+      if (!isDone(m) || isBye(m) || m.wo) continue;
+      if (!((m.a === ia && m.b === ib) || (m.a === ib && m.b === ia))) continue;
+      const [sa, sb] = m.a === ia ? [m.sa, m.sb] : [m.sb, m.sa];
+      out.a.ff += sa; out.b.ff += sb;
+      (sa > sb ? out.a : out.b).w++;
+      out.meetings.push({ tid: t.id, tname: t.name, sa, sb, at: m.endedAt || t.createdAt || 0 });
+    }
+  }
+  out.meetings.sort((x, y) => y.at - x.at);
+  return out;
+}

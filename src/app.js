@@ -1074,8 +1074,11 @@ function viewPlayers() {
 }
 
 function playerCard(name) {
-  const r = L.hallOfFame(db.tournaments.filter(t => !t.demo)).find(x => x.name === name);
+  const all = L.hallOfFame(db.tournaments.filter(t => !t.demo));
+  const r = all.find(x => x.name === name);
   if (!r) return;
+  const rank = n => all.findIndex(x => x.name === n);
+  const others = all.filter(x => x.name !== name);
   const medal = p => (p ? `<span class="ball m${p}" style="font-size:24px"><i>${p}</i></span>` : `<span class="ball-ph" style="font-size:24px"></span>`);
   openSheet(`<div class="grab"></div><h3 class="t-h1">${esc(r.name)}</h3>
     <div class="kpis" style="grid-template-columns:repeat(3,minmax(0,1fr));margin:16px 0">
@@ -1084,7 +1087,24 @@ function playerCard(name) {
       <div class="kpi"><span class="t-over">${tr('framePct')}</span><span class="v">${pct(r.framePct)}</span></div>
     </div>
     <div class="card">${r.history.map(h => `<div class="list-row">${medal(h.place)}<span class="grow ell" style="font-weight:600">${esc(h.name)}</span><span class="t-sm ink-3 tnum">${h.w}–${h.l}${h.done ? '' : ' · ' + tr('ongoing')}</span></div>`).join('')}</div>
+    ${others.length ? `<section class="stack" style="margin-top:20px">
+      <span class="t-over">${tr('h2hTitle')}</span>
+      <div class="field">${ICON.users}<select id="h2hPick" aria-label="${tr('h2hPick')}"><option value="">${tr('h2hPick')}</option>
+        ${others.map(o => `<option value="${esc(o.name)}">${esc(o.name)}</option>`).join('')}</select></div>
+      <div id="h2h"></div>
+    </section>` : ''}
     <button class="btn btn-s btn-block" style="margin-top:16px" data-act="closeModal">${tr('close')}</button>`);
+  $('#h2hPick')?.addEventListener('change', e => {
+    const other = e.target.value;
+    const box = $('#h2h');
+    if (!other) { box.innerHTML = ''; return; }
+    const h = L.headToHead(db.tournaments.filter(t => !t.demo), name, other);
+    if (!h.meetings.length) { box.innerHTML = `<p class="t-sm ink-3">${tr('h2hNone', { a: esc(name), b: esc(other) })}</p>`; return; }
+    const side = (n, x, lead) => `<div class="h2h-side ${lead ? 'lead' : ''}">${ballEl(idxBall(rank(n)), 34, 'lift')}<span class="ell">${esc(n)}</span><span class="num">${x.w}</span></div>`;
+    box.innerHTML = `<div class="feltbox h2h">${side(name, h.a, h.a.w > h.b.w)}<span class="h2h-vs">–</span>${side(other, h.b, h.b.w > h.a.w)}</div>
+      <p class="t-xs ink-3 center">${tr('h2hFrames', { a: h.a.ff, b: h.b.ff, n: h.meetings.length })}</p>
+      <div class="card">${h.meetings.slice(0, 8).map(x => `<div class="list-row"><span class="grow ell t-sm">${esc(x.tname)}</span><span class="num t-h3 ${x.sa > x.sb ? 'c-win' : 'c-loss'}">${x.sa}–${x.sb}</span></div>`).join('')}</div>`;
+  });
 }
 
 // ---------- Settings ----------
