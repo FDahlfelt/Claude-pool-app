@@ -20,7 +20,12 @@ export const DEFAULT_SETTINGS = {
   tables: 1,
   breakRule: 'alternate', // or 'winner'
   seeding: 'random',      // knockout: 'random' or 'list'
+  ballCount: true,        // record the loser's balls left after each frame, used as a tiebreaker
 };
+
+/** Object balls a player can have left when losing a frame. */
+export const MAX_BALLS = { '8ball': 7, '9ball': 8, '10ball': 9, other: 7 };
+export const maxBalls = game => MAX_BALLS[game] ?? 7;
 
 export const uid = () => Math.random().toString(36).slice(2, 10);
 
@@ -48,6 +53,20 @@ export function score(m) {
   if (isDone(m) && !isBye(m)) return [m.sa, m.sb];
   let a = 0, b = 0;
   for (const f of m.frames || []) f.w === 'a' ? a++ : b++;
+  return [a, b];
+}
+
+/**
+ * Balls left on the table for each side, summed over the frames that side lost.
+ * A match entered as a final score may carry its own totals in m.balls.
+ */
+export function ballsLeft(m) {
+  if (Array.isArray(m.balls)) return m.balls;
+  let a = 0, b = 0;
+  for (const f of m.frames || []) {
+    if (f.left == null) continue;
+    if (f.w === 'a') b += f.left; else a += f.left;
+  }
   return [a, b];
 }
 
@@ -158,7 +177,10 @@ export function makeBracket(seeds, { bronze = false, labels = [] } = {}) {
 export function syncBracket(br) {
   if (!br) return;
   const fill = (m, a, b) => {
-    if (m.a !== a || m.b !== b) Object.assign(m, { a, b, sa: null, sb: null, frames: [], startedAt: null, endedAt: null, table: null });
+    if (m.a !== a || m.b !== b) {
+      Object.assign(m, { a, b, sa: null, sb: null, frames: [], startedAt: null, endedAt: null, table: null });
+      delete m.balls;
+    }
   };
   for (let r = 1; r < br.rounds.length; r++) {
     br.rounds[r].forEach((m, i) => fill(m, winnerOf(br.rounds[r - 1][2 * i]), winnerOf(br.rounds[r - 1][2 * i + 1])));
@@ -187,14 +209,17 @@ export function separateGroups(first, groupOf) {
 
 // ---------- Standings ----------
 
-export function computeStandings({ players, matches, byes = [], pointsPerWin = 1, byeWins = false, buchholz = false }) {
-  const rows = new Map(players.map(p => [p.id, { id: p.id, name: p.name, p: 0, w: 0, l: 0, ff: 0, fa: 0, form: [], byes: 0, opp: [] }]));
+export function computeStandings({ players, matches, byes = [], pointsPerWin = 1, byeWins = false, buchholz = false, balls = false }) {
+  const rows = new Map(players.map(p => [p.id, { id: p.id, name: p.name, p: 0, w: 0, l: 0, ff: 0, fa: 0, bf: 0, ba: 0, form: [], byes: 0, opp: [] }]));
   for (const m of matches) {
     if (isBye(m) || !isDone(m)) continue;
     const A = rows.get(m.a), B = rows.get(m.b);
     if (!A || !B) continue;
     A.p++; B.p++;
     A.ff += m.sa; A.fa += m.sb; B.ff += m.sb; B.fa += m.sa;
+    // Ball difference: the opponent's balls left count for you, your own against you.
+    const [la, lb] = ballsLeft(m);
+    A.bf += lb; A.ba += la; B.bf += la; B.ba += lb;
     A.opp.push(B.id); B.opp.push(A.id);
     const aWon = m.sa > m.sb;
     (aWon ? A : B).w++;
@@ -207,7 +232,7 @@ export function computeStandings({ players, matches, byes = [], pointsPerWin = 1
     if (r) { r.byes++; r.w++; r.form.push('B'); }
   }
   const list = [...rows.values()];
-  list.forEach(r => { r.diff = r.ff - r.fa; r.pts = r.w * pointsPerWin; });
+  list.forEach(r => { r.diff = r.ff - r.fa; r.bdiff = r.bf - r.ba; r.pts = r.w * pointsPerWin; });
   if (buchholz) {
     const pts = new Map(list.map(r => [r.id, r.pts]));
     list.forEach(r => { r.bh = r.opp.reduce((s, o) => s + pts.get(o), 0); });
@@ -225,6 +250,7 @@ export function computeStandings({ players, matches, byes = [], pointsPerWin = 1
     y.pts - x.pts ||
     (buchholz ? y.bh - x.bh : 0) ||
     y.diff - x.diff ||
+    (balls ? y.bdiff - x.bdiff : 0) ||
     y.ff - x.ff ||
     h2h(x.id, y.id) ||
     x.name.localeCompare(y.name));
@@ -315,6 +341,7 @@ export function standingsFor(t, ids) {
     pointsPerWin: t.settings.pointsPerWin,
     byeWins: t.format === 'swiss',
     buchholz: t.format === 'swiss',
+    balls: !!t.settings.ballCount,
   });
 }
 
@@ -427,6 +454,7 @@ export function addFrame(t, m, side, race) {
   if (isDone(m) || !isReady(m)) return false;
   startMatch(t, m);
   m.frames = m.frames || [];
+  delete m.balls;
   m.frames.push({ w: side, b: breakerFor(m, m.frames.length, t.settings.breakRule), at: Date.now() });
   const [a, b] = score(m);
   if (a >= race || b >= race) {
@@ -440,12 +468,24 @@ export function addFrame(t, m, side, race) {
 export function undoFrame(t, m) {
   if (!m.frames?.length) return;
   m.frames.pop();
+  delete m.balls;
   if (m.sa != null) { m.sa = null; m.sb = null; m.endedAt = null; syncBracket(t.bracket); }
 }
 
-export function setResult(t, m, sa, sb) {
+/** Records how many balls the loser of frame i had left. black = lost by potting the 8 too early. */
+export function setFrameBalls(t, m, i, left, black = false) {
+  const f = m.frames?.[i];
+  if (!f) return;
+  delete m.balls;
+  if (left == null && !black) { delete f.left; delete f.black; return; }
+  f.left = black ? maxBalls(t.game) : Math.max(0, Math.min(maxBalls(t.game), left));
+  if (black) f.black = true; else delete f.black;
+}
+
+export function setResult(t, m, sa, sb, balls) {
   const [fa, fb] = score({ frames: m.frames });
   if (fa !== sa || fb !== sb) m.frames = [];
+  if (balls) m.balls = balls; else delete m.balls;
   m.sa = sa; m.sb = sb;
   m.endedAt = Date.now();
   m.startedAt = m.startedAt || m.endedAt;
@@ -454,6 +494,7 @@ export function setResult(t, m, sa, sb) {
 
 export function clearMatch(t, m) {
   Object.assign(m, { sa: null, sb: null, frames: [], startedAt: null, endedAt: null, table: null });
+  delete m.balls;
   syncBracket(t.bracket);
 }
 
@@ -479,10 +520,10 @@ export function upNext(t) {
 // ---------- Statistics ----------
 
 export function playerStats(t) {
-  const rows = new Map(t.players.map(p => [p.id, { id: p.id, name: p.name, p: 0, w: 0, l: 0, ff: 0, fa: 0, br: 0, best: 0, cur: 0, shutouts: 0 }]));
+  const rows = new Map(t.players.map(p => [p.id, { id: p.id, name: p.name, p: 0, w: 0, l: 0, ff: 0, fa: 0, bf: 0, ba: 0, br: 0, blacks: 0, best: 0, cur: 0, shutouts: 0 }]));
   const ms = allMatches(t).filter(m => isDone(m) && !isBye(m));
   const chrono = ms.map((m, i) => ({ m, i })).sort((x, y) => (x.m.endedAt || 0) - (y.m.endedAt || 0) || x.i - y.i).map(x => x.m);
-  const highlights = { biggest: null, longest: null, frames: 0, br: 0 };
+  const highlights = { biggest: null, longest: null, frames: 0, br: 0, blacks: 0 };
   for (const m of chrono) {
     const A = rows.get(m.a), B = rows.get(m.b);
     if (!A || !B) continue;
@@ -492,7 +533,12 @@ export function playerStats(t) {
     A.ff += m.sa; A.fa += m.sb; B.ff += m.sb; B.fa += m.sa;
     W.cur++; W.best = Math.max(W.best, W.cur); L.cur = 0;
     if (Math.min(m.sa, m.sb) === 0) W.shutouts++;
-    for (const f of m.frames || []) if (f.br && f.w === f.b) { (f.w === 'a' ? A : B).br++; highlights.br++; }
+    for (const f of m.frames || []) {
+      if (f.br && f.w === f.b) { (f.w === 'a' ? A : B).br++; highlights.br++; }
+      if (f.black) { (f.w === 'a' ? B : A).blacks++; highlights.blacks++; }
+    }
+    const [la, lb] = ballsLeft(m);
+    A.bf += lb; A.ba += la; B.bf += la; B.ba += lb;
     const margin = Math.abs(m.sa - m.sb), total = m.sa + m.sb;
     highlights.frames += total;
     const big = highlights.biggest;
@@ -503,6 +549,7 @@ export function playerStats(t) {
   list.forEach(r => {
     r.winPct = r.p ? r.w / r.p : 0;
     r.framePct = r.ff + r.fa ? r.ff / (r.ff + r.fa) : 0;
+    r.bdiff = r.bf - r.ba;
   });
   list.sort((x, y) => y.winPct - x.winPct || y.framePct - x.framePct || y.w - x.w || x.name.localeCompare(y.name));
   return { players: list, highlights, matches: chrono.length };

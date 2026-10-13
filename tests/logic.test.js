@@ -158,3 +158,38 @@ test('validate catches impossible setups', () => {
   assert.equal(L.validate('groups', 7, { ...s, groupCount: 2, advance: 4 }), 'advance');
   assert.equal(L.validate('swiss', 7, { ...s, swissRounds: 7 }), 'swissRounds');
 });
+
+test('balls left: ball difference splits players level on points and frames', () => {
+  const players = ['A', 'B', 'C'].map(id => ({ id, name: id }));
+  // A cycle: everyone 1 win, 3–2 each way, so points, frames and frame difference are level.
+  const m = (a, b, sa, sb, balls) => ({ ...L.mkMatch(a, b), sa, sb, balls });
+  const matches = [m('A', 'B', 3, 2, [1, 9]), m('B', 'C', 3, 2, [2, 4]), m('C', 'A', 3, 2, [6, 2])];
+  const plain = L.computeStandings({ players, matches });
+  assert.deepEqual(plain.map(r => r.id), ['A', 'B', 'C']);
+  const st = L.computeStandings({ players, matches, balls: true });
+  // A: for 9+6=15, against 1+2=3 -> +12. B: for 1+4=5, against 9+2=11 -> -6. C: for 2+2=4, against 4+6=10 -> -6.
+  assert.equal(st[0].id, 'A');
+  assert.equal(st[0].bdiff, 12);
+  assert.deepEqual(st.map(r => r.bdiff), [12, -6, -6]);
+});
+
+test('balls left are recorded per frame; an early black counts as every ball left', () => {
+  const t = L.createTournament({ name: 'B', format: 'league', game: '8ball', names: names(3), settings: { raceTo: 2 } });
+  const m = L.stageMatches(t)[0];
+  L.addFrame(t, m, 'a', 2);
+  L.setFrameBalls(t, m, 0, 3);
+  L.addFrame(t, m, 'b', 2);
+  L.setFrameBalls(t, m, 1, null, true);
+  assert.deepEqual(L.ballsLeft(m), [7, 3]);
+  L.addFrame(t, m, 'a', 2);
+  L.setFrameBalls(t, m, 2, 0);
+  assert.deepEqual(L.ballsLeft(m), [7, 3]);
+  const row = L.standingsFor(t).find(r => r.id === m.a);
+  assert.equal(row.bdiff, -4);
+  assert.equal(L.playerStats(t).players.find(r => r.id === m.a).blacks, 1);
+  // A final score typed in directly carries its own totals.
+  L.setResult(t, m, 2, 0, [0, 5]);
+  assert.deepEqual(L.ballsLeft(m), [0, 5]);
+  L.clearMatch(t, m);
+  assert.deepEqual(L.ballsLeft(m), [0, 0]);
+});

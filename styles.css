@@ -449,3 +449,23 @@ dialog#modal::backdrop { background: rgba(0, 0, 0, .55); }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }
+
+/* ---------- Balls left ---------- */
+.ball-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-top: 14px; }
+.ball-pick {
+  aspect-ratio: 1; max-width: 100%; border-radius: 50%; border: 2px solid var(--line);
+  background: radial-gradient(circle at 35% 30%, var(--felt-2), var(--felt-3));
+  font: 800 1.5rem/1 var(--font-display); font-variant-numeric: tabular-nums;
+}
+.ball-pick[aria-pressed="true"] { border-color: var(--chalk); background: var(--chalk); color: var(--chalk-ink); }
+.black-btn { margin-top: 12px; }
+.black-btn[aria-pressed="true"] { border-color: var(--ink); }
+.eight {
+  width: 18px; height: 18px; border-radius: 50%; flex: none; display: inline-block; vertical-align: -3px;
+  background: radial-gradient(circle at 50% 50%, #fff 0 32%, transparent 34%), radial-gradient(circle at 32% 28%, #555, #000 70%);
+  box-shadow: 0 0 0 1px var(--line);
+}
+.balls-chip { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--line); background: var(--felt-3); border-radius: 999px; padding: 4px 10px; font-size: .75rem; font-weight: 700; color: var(--ink-2); }
+.balls-chip.empty { background: transparent; border-style: dashed; color: var(--ink-3); }
+.balls-chip .eight { width: 14px; height: 14px; vertical-align: -2px; }
+.qr.small .qr-val { font-size: 2rem; }

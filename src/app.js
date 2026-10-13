@@ -329,6 +329,8 @@ function rulesFields() {
       ${selectField('f-tables', 'tables', range(1, 12), tr('tables'))}
     </div>
     ${P >= 4 ? `<label class="check"><input type="checkbox" id="f-bronze" data-draft="bronze" ${d.bronze ? 'checked' : ''}> ${tr('bronzeMatch')}</label>` : ''}
+    <label class="check"><input type="checkbox" id="f-balls" data-draft="ballCount" ${d.ballCount ? 'checked' : ''}> ${tr('ballCount')}</label>
+    <p class="hint">${tr('ballCountHint', { n: L.maxBalls(d.game) })}</p>
     <div class="lbl">${tr('breakRule')}</div>${seg('breakRule', [['alternate', tr('breakAlternate')], ['winner', tr('breakWinner')]])}`;
 }
 
@@ -578,12 +580,14 @@ function tabMatches(t) {
 
 function standingsTable(t, rows, cut) {
   const swiss = t.format === 'swiss';
+  const balls = !!t.settings.ballCount;
+  const sign = n => (n > 0 ? '+' : '') + n;
   return `<div class="tablewrap"><table class="stand">
     <thead><tr><th>#</th><th class="l">${tr('player')}</th><th title="${tr('colPLong')}">${tr('colP')}</th><th>${tr('colW')}</th><th>${tr('colL')}</th>
-      <th class="hide-xs">${tr('colFrames')}</th><th>+/−</th>${swiss ? `<th title="Buchholz">BH</th>` : ''}<th>${tr('colPts')}</th><th class="hide-xs l">${tr('colForm')}</th></tr></thead>
+      <th class="hide-xs">${tr('colFrames')}</th><th title="${tr('colFrameDiffLong')}">+/−</th>${balls ? `<th title="${tr('colBallsLong')}">${tr('colBalls')}</th>` : ''}${swiss ? `<th title="Buchholz">BH</th>` : ''}<th>${tr('colPts')}</th><th class="hide-xs l">${tr('colForm')}</th></tr></thead>
     <tbody>${rows.map((r, i) => `<tr class="${i < cut ? 'q' : ''}">
       <td class="pos">${i + 1}</td><td class="l nm">${esc(r.name)}</td><td>${r.p}</td><td>${r.w}</td><td>${r.l}</td>
-      <td class="hide-xs">${r.ff}–${r.fa}</td><td>${r.diff > 0 ? '+' : ''}${r.diff}</td>${swiss ? `<td>${r.bh}</td>` : ''}<td class="pts">${r.pts}</td>
+      <td class="hide-xs">${r.ff}–${r.fa}</td><td>${sign(r.diff)}</td>${balls ? `<td>${sign(r.bdiff)}</td>` : ''}${swiss ? `<td>${r.bh}</td>` : ''}<td class="pts">${r.pts}</td>
       <td class="hide-xs l"><span class="form">${r.form.slice(-5).map(x => `<i class="f${x}">${tr('form' + x)}</i>`).join('')}</span></td>
     </tr>`).join('')}</tbody></table></div>`;
 }
@@ -608,7 +612,7 @@ function matrix(t, ids) {
 }
 
 function tabTable(t) {
-  const rules = tr('tiebreak' + (t.format === 'swiss' ? 'Swiss' : ''), { p: t.settings.pointsPerWin });
+  const rules = tr('tiebreak' + (t.format === 'swiss' ? 'Swiss' : t.settings.ballCount ? 'Balls' : ''), { p: t.settings.pointsPerWin });
   if (t.format === 'groups') {
     return t.groups.map(g => `<h2 class="sec">${tr('groupN', { g: g.name })}</h2>${standingsTable(t, L.standingsFor(t, g.players), t.settings.advance)}`).join('') +
       `<p class="hint">${rules} ${tr('qualifyGroups', { n: t.settings.advance })}</p>` +
@@ -671,15 +675,15 @@ function tabStats(t) {
   const tiles = [
     [tr('stMatches'), matches],
     [tr('stFrames'), h.frames],
-    [tr('stBR'), h.br],
+    t.settings.ballCount ? [tr('stBlacks'), h.blacks] : [tr('stBR'), h.br],
     [tr('stBiggest'), big ? `${big.sa}–${big.sb}` : '–', big ? `${n(big.a)} – ${n(big.b)}` : ''],
   ];
   return `<div class="tiles">${tiles.map(([k, v, s]) => `<div class="tile"><div class="tile-k">${k}</div><div class="tile-v">${v}</div>${s ? `<div class="tile-s">${s}</div>` : ''}</div>`).join('')}</div>
     <div class="tablewrap"><table class="stand stats">
-      <thead><tr><th class="l">${tr('player')}</th><th>${tr('colP')}</th><th>${tr('colW')}–${tr('colL')}</th><th class="l">${tr('winPct')}</th><th class="hide-xs">${tr('framePct')}</th><th title="${tr('streakLong')}">${tr('streak')}</th><th title="Break &amp; run">B&amp;R</th></tr></thead>
+      <thead><tr><th class="l">${tr('player')}</th><th>${tr('colP')}</th><th>${tr('colW')}–${tr('colL')}</th><th class="l">${tr('winPct')}</th><th class="hide-xs">${tr('framePct')}</th><th title="${tr('streakLong')}">${tr('streak')}</th>${t.settings.ballCount ? `<th title="${tr('colBallsLong')}">${tr('colBalls')}</th>` : ''}<th title="Break &amp; run">B&amp;R</th></tr></thead>
       <tbody>${players.map(r => `<tr><td class="l nm">${esc(r.name)}</td><td>${r.p}</td><td>${r.w}–${r.l}</td>
         <td class="l"><span class="pbar"><i style="width:${pct(r.winPct)}"></i></span>${pct(r.winPct)}</td>
-        <td class="hide-xs">${pct(r.framePct)}</td><td>${r.best}</td><td>${r.br}</td></tr>`).join('')}</tbody>
+        <td class="hide-xs">${pct(r.framePct)}</td><td>${r.best}</td>${t.settings.ballCount ? `<td>${r.bdiff > 0 ? '+' : ''}${r.bdiff}</td>` : ''}<td>${r.br}</td></tr>`).join('')}</tbody>
     </table></div>
     <p class="hint">${tr('brHint')}</p>`;
 }
@@ -701,6 +705,8 @@ function tabManage(t) {
         <div class="field"><label class="lbl" for="m-break">${tr('breakRule')}</label>
           <select class="input" id="m-break" data-setting="breakRule">${[['alternate', tr('breakAlternate')], ['winner', tr('breakWinner')]].map(([v, l]) => `<option value="${v}" ${t.settings.breakRule === v ? 'selected' : ''}>${l}</option>`).join('')}</select></div>
       </div>
+      <label class="check"><input type="checkbox" id="m-balls" data-setting="ballCount" ${t.settings.ballCount ? 'checked' : ''}> ${tr('ballCount')}</label>
+      <p class="hint">${tr('ballCountHint', { n: L.maxBalls(t.game) })}</p>
       <p class="hint">${tr('racesFixed', { a: t.settings.raceTo, b: t.settings.koRace, c: t.settings.finalRace })}</p>
     </section>
     <section class="panel">
@@ -765,6 +771,7 @@ function viewMatch(t, mid) {
       <span class="fl-n">${i + 1}</span>
       <span class="fl-w">${pname(t, m[f.w])}</span>
       <span class="fl-b muted">${tr('brokeBy', { name: pname(t, m[f.b]) })}</span>
+      ${t.settings.ballCount ? `<button class="balls-chip ${f.left == null ? 'empty' : ''}" data-act="editBalls" data-i="${i}">${f.left == null ? tr('addBalls') : f.black ? `<span class="eight"></span>${tr('earlyBlackShort')}` : tr('leftN', { n: f.left })}</button>` : ''}
       ${f.w === f.b ? `<button class="br-chip" data-act="toggleBR" data-i="${i}" aria-pressed="${!!f.br}" title="Break &amp; run">${ICON.bolt}B&amp;R</button>` : ''}
     </li>`).join('');
   return bar({ back: backTo, title: ctxLabel(t, m), sub: `${t.name} · ${tr('raceShort', { n: race })}` }) + `<main class="wrap match">
@@ -781,8 +788,25 @@ function viewMatch(t, mid) {
   </main>`;
 }
 
+/** Asks how many balls the loser of frame i had left. */
+function ballsSheet(t, m, i) {
+  const f = m.frames[i];
+  if (!f) return;
+  const loser = m[f.w === 'a' ? 'b' : 'a'];
+  const max = L.maxBalls(t.game);
+  openModal(`<h3>${tr('ballsQ', { name: esc(L.playerName(t, loser)) })}</h3>
+    <p class="muted">${tr('ballsSub', { n: i + 1, name: esc(L.playerName(t, m[f.w])) })}</p>
+    <div class="ball-grid">${range(0, max).map(n => `<button class="ball-pick" data-act="pickBalls" data-i="${i}" data-n="${n}" aria-pressed="${f.left === n && !f.black}">${n}</button>`).join('')}</div>
+    <button class="btn ghost block black-btn" data-act="pickBlack" data-i="${i}" aria-pressed="${!!f.black}"><span class="eight"></span><span>${tr('earlyBlack', { name: esc(L.playerName(t, loser)) })}</span></button>
+    <p class="hint">${tr('earlyBlackHint', { n: max })}</p>
+    <div class="modal-actions"><button class="btn ghost" data-act="skipBalls" data-i="${i}">${f.left == null ? tr('skip') : tr('clearBalls')}</button></div>`);
+}
+
 function quickResult(t, m, race) {
   let a = m.sa ?? L.score(m)[0], b = m.sb ?? L.score(m)[1];
+  const useBalls = !!t.settings.ballCount;
+  let [la, lb] = L.ballsLeft(m);
+  const max = L.maxBalls(t.game);
   const draw = () => {
     const ok = L.validScore(a, b, race);
     $('#qr').innerHTML = `
@@ -792,21 +816,38 @@ function quickResult(t, m, race) {
         <div class="qr-ctl"><button class="step" data-q="b" data-d="-1" aria-label="−1">−</button><button class="step" data-q="b" data-d="1" aria-label="+1">+</button></div></div>`;
     $('#qrHint').textContent = ok ? tr('wonBy', { name: L.playerName(t, a > b ? m.a : m.b), a: Math.max(a, b), b: Math.min(a, b) }) : tr('needRace', { n: race });
     $('#qrSave').disabled = !ok;
+    if (useBalls) {
+      // A player can only have balls left in frames they lost.
+      la = Math.min(la, b * max); lb = Math.min(lb, a * max);
+      $('#qrBalls').innerHTML = `<div class="lbl">${tr('ballsLeftTotal')}</div><div class="qr small">
+        <div class="qr-side"><div class="qr-name">${pname(t, m.a)}</div><div class="qr-val">${la}</div>
+          <div class="qr-ctl"><button class="step" data-q="la" data-d="-1" aria-label="−1">−</button><button class="step" data-q="la" data-d="1" aria-label="+1">+</button></div></div>
+        <div class="qr-side"><div class="qr-name">${pname(t, m.b)}</div><div class="qr-val">${lb}</div>
+          <div class="qr-ctl"><button class="step" data-q="lb" data-d="-1" aria-label="−1">−</button><button class="step" data-q="lb" data-d="1" aria-label="+1">+</button></div></div>
+      </div><p class="hint">${tr('ballsTotalHint', { n: max })}</p>`;
+    }
   };
   openModal(`<h3>${tr('enterResult')}</h3><p class="muted">${tr('raceShort', { n: race })}</p>
     <div class="qr" id="qr"></div><p class="hint" id="qrHint"></p>
+    ${useBalls ? '<div id="qrBalls"></div>' : ''}
     <div class="modal-actions"><button class="btn ghost" data-act="closeModal">${tr('cancel')}</button><button class="btn primary" id="qrSave">${tr('save')}</button></div>`);
   draw();
-  $('#qr').addEventListener('click', e => {
+  $('.modal').addEventListener('click', e => {
     const s = e.target.closest('[data-q]');
     if (!s) return;
     const k = s.dataset.q, d = +s.dataset.d;
+    if (k === 'la') { la = Math.max(0, Math.min(b * max, la + d)); return draw(); }
+    if (k === 'lb') { lb = Math.max(0, Math.min(a * max, lb + d)); return draw(); }
     if (k === 'a') a = Math.max(0, Math.min(race, a + d)); else b = Math.max(0, Math.min(race, b + d));
     if (a === race && b === race) k === 'a' ? (b = race - 1) : (a = race - 1);
     draw();
   });
   $('#qrSave').addEventListener('click', () => {
-    L.setResult(t, m, a, b);
+    const [fa, fb] = L.score({ frames: m.frames });
+    const [oa, ob] = L.ballsLeft(m);
+    // Keep per-frame ball counts when the frames already add up to this result.
+    const keepFrames = fa === a && fb === b && oa === la && ob === lb;
+    L.setResult(t, m, a, b, useBalls && !keepFrames ? [la, lb] : undefined);
     closeModal();
     afterResult(t, m);
   });
@@ -1131,7 +1172,12 @@ const actions = {
     vibrate(15);
     if (finished) afterResult(t, info.m);
     else commit(t);
+    if (t.settings.ballCount) ballsSheet(t, info.m, info.m.frames.length - 1);
   },
+  editBalls: el => { const t = curT(); ballsSheet(t, L.matchInfo(t, route.mid).m, +el.dataset.i); },
+  pickBalls: el => { const t = curT(); L.setFrameBalls(t, L.matchInfo(t, route.mid).m, +el.dataset.i, +el.dataset.n); closeModal(); commit(t); },
+  pickBlack: el => { const t = curT(); L.setFrameBalls(t, L.matchInfo(t, route.mid).m, +el.dataset.i, null, true); closeModal(); commit(t); },
+  skipBalls: el => { const t = curT(); L.setFrameBalls(t, L.matchInfo(t, route.mid).m, +el.dataset.i, null); closeModal(); commit(t); },
   undo: () => { const t = curT(); L.undoFrame(t, L.matchInfo(t, route.mid).m); commit(t); },
   swapBreak: () => { const t = curT(); const m = L.matchInfo(t, route.mid).m; m.firstBreak = (m.firstBreak || 'a') === 'a' ? 'b' : 'a'; commit(t); },
   toggleBR: el => { const t = curT(); const f = L.matchInfo(t, route.mid).m.frames[+el.dataset.i]; f.br = !f.br; commit(t); },
@@ -1234,7 +1280,7 @@ document.addEventListener('change', e => {
   if (el.id === 'playerFilter') { ui.player = el.value; render(); }
   if (el.dataset.setting) {
     const t = curT();
-    t.settings[el.dataset.setting] = el.dataset.setting === 'tables' ? +el.value : el.value;
+    t.settings[el.dataset.setting] = el.type === 'checkbox' ? el.checked : el.dataset.setting === 'tables' ? +el.value : el.value;
     commit(t);
     toast(tr('saved'));
   }
