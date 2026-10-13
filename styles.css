@@ -662,7 +662,7 @@ table.st tr.click:active{ background:var(--chalk-soft); }
 
 /* Bracket */
 .bracket-scroll{ overflow-x:auto; margin:0 -16px; padding:4px 16px 8px; scrollbar-width:thin; }
-.brk{ display:grid; grid-template-columns:repeat(var(--cols), minmax(172px, 1fr)); gap:16px; }
+.bracket-grid{ display:grid; grid-template-columns:repeat(var(--cols), minmax(172px, 1fr)); gap:16px; }
 .brk-col{ display:flex; flex-direction:column; gap:10px; min-width:0; }
 .brk-col .bk-h{ justify-content:space-between; }
 .brk-body{ flex:1; display:flex; flex-direction:column; justify-content:space-around; gap:14px; }
@@ -796,7 +796,7 @@ button.bk{ display:block; width:100%; text-align:left; }
   .rounds{ display:grid; grid-template-columns:repeat(auto-fill, minmax(420px, 1fr)); gap:16px; align-items:start; }
   .duo{ display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:28px; align-items:start; }
   .kpis{ grid-template-columns:repeat(4, minmax(0, 1fr)); }
-  .brk{ grid-template-columns:repeat(var(--cols), minmax(210px, 1fr)); gap:24px; }
+  .bracket-grid{ grid-template-columns:repeat(var(--cols), minmax(210px, 1fr)); gap:24px; }
   .bracket-scroll{ margin:0; padding:4px 0 8px; }
 
   /* New tournament: players on the left, format and rules on the right */
@@ -854,3 +854,28 @@ button.bk{ display:block; width:100%; text-align:left; }
 .field input:focus-visible, .field select:focus-visible, .field textarea:focus-visible{ outline:none; }
 .grand{ display:flex; flex-direction:column; gap:10px; max-width:360px; }
 .grand .bronze-box{ margin-top:6px; }
+
+/* ---------- 24. The table scales with its size ----------
+   The felt is a size container, so names, scores and diamonds shrink with a small table instead of
+   running past the rail. The BREAK tag floats above the content, so both halves lay out the same. */
+.felt{ container-type:size; }
+.half{ padding:clamp(30px, 13cqh, 46px) 8px clamp(8px, 5cqh, 16px); justify-content:space-evenly; gap:clamp(2px, 1.5cqh, 6px); }
+.half .brk-tag{ position:absolute; top:clamp(6px, 3cqh, 14px); left:0; right:0; margin:0 auto; width:max-content; }
+.half .pl{ gap:clamp(2px, 1.5cqh, 6px); }
+.half .pl .ball{ font-size:clamp(18px, 8cqh, 30px); }
+.pl-name{ font-size:clamp(14px, 6cqh, 21px); }
+.score{ height:auto; font-size:clamp(52px, 38cqh, 152px); }
+.dias{ height:auto; gap:clamp(7px, 3cqh, 13px); }
+.dia{ width:clamp(9px, 3.2cqh, 13px); height:clamp(9px, 3.2cqh, 13px); }
+.half .hint{ font-size:clamp(10.5px, 3.4cqh, 12px); min-height:0; }
+
+@media (min-width:960px){
+  /* Keep the whole table on screen: no taller than the window allows. */
+  .match-main .table{ width:min(100%, calc((100vh - 200px) * 1.8 + 40px)); margin:0 auto; }
+}
+/* Not enough room for the table and the tools side by side: tools go below the table. */
+@media (min-width:960px) and (max-width:1339px){
+  .match-grid{ grid-template-columns:minmax(0, 1fr); max-width:980px; }
+  .match-main{ position:static; }
+  .match-side .acts{ grid-template-columns:repeat(4, minmax(0, 1fr)); }
+}

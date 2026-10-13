@@ -5,7 +5,7 @@ import { encode, decode, isTournament, summaryText } from './share.js';
 import * as Live from './live.js';
 import { renderCard } from './card.js';
 
-const VERSION = '2.4.0';
+const VERSION = '2.4.1';
 const $ = (s, el = document) => el.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const pct = x => Math.round(x * 100) + '%';
@@ -804,7 +804,7 @@ function tabBracket(t) {
 /** Double knockout: the winners' side, the losers' side and the grand final. */
 /** Bracket rounds as scrollable columns; shared by the single and the double knockout views. */
 function bracketColumns(t, rounds, { name, race, isFinal = () => false, after = () => '' }) {
-  return `<div class="bracket-scroll"><div class="brk" style="--cols:${rounds.length}">${rounds.map((ms, r) =>
+  return `<div class="bracket-scroll"><div class="bracket-grid" style="--cols:${rounds.length}">${rounds.map((ms, r) =>
     `<div class="brk-col"><div class="bk-h"><span>${name(r)}</span><span class="tnum">${tr('raceShort', { n: race(r) })}</span></div>
       <div class="brk-body">${ms.filter(m => m.a !== L.NONE).map(m => bmatch(t, m, isFinal(r))).join('')}${after(r)}</div></div>`).join('')}</div></div>`;
 }
