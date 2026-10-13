@@ -219,6 +219,9 @@ select.input { appearance: none; background-image: linear-gradient(45deg, transp
   padding: 14px; display: flex; flex-direction: column; gap: 8px; color: var(--ink); width: 100%; min-width: 0;
   transition: border-color .15s ease, transform .08s ease;
 }
+.tcard { cursor: pointer; }
+.tcard-del { width: 34px; height: 34px; margin: -6px -6px -6px 0; color: var(--ink-3); }
+.tcard-del:hover { color: var(--loss); background: color-mix(in srgb, var(--loss) 12%, transparent); }
 .tcard:hover { border-color: color-mix(in srgb, var(--chalk) 50%, var(--line)); }
 .tcard:active { transform: scale(.99); }
 .tcard-top { display: flex; align-items: center; gap: 10px; min-width: 0; }

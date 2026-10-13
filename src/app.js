@@ -159,12 +159,14 @@ function tCard(t) {
     const live = L.allMatches(t).filter(L.isLive).length;
     status = live ? `<span class="live-dot"></span>${tr('nLive', { n: live })}` : tr('phStage');
   }
-  return `<button class="tcard" data-act="open" data-id="${t.id}">
-    <div class="tcard-top">${ball(t.game)}<div class="tcard-name">${esc(t.name)}</div><span class="chip">${fmtName(t.format)}</span></div>
+  // A div with role="button" so the delete button inside it is valid markup.
+  return `<div class="tcard" data-act="open" data-id="${t.id}" role="button" tabindex="0">
+    <div class="tcard-top">${ball(t.game)}<div class="tcard-name">${esc(t.name)}</div><span class="chip">${fmtName(t.format)}</span>
+      <button class="icon-btn tcard-del" data-act="deleteFromHome" data-id="${t.id}" aria-label="${tr('deleteNamed', { name: esc(t.name) })}" title="${tr('deleteT')}">${ICON.trash}</button></div>
     <div class="tcard-meta">${tr('nPlayers', { n: t.players.length })} · ${status}</div>
     <div class="meter" role="progressbar" aria-valuemin="0" aria-valuemax="${total}" aria-valuenow="${done}"><i style="width:${total ? (done / total) * 100 : 0}%"></i></div>
     <div class="tcard-foot"><span>${tr('matchesOf', { done, total })}</span><span>${relTime(t.updatedAt)}</span></div>
-  </button>`;
+  </div>`;
 }
 
 function viewHome() {
@@ -1219,6 +1221,13 @@ const actions = {
   },
   rematch: () => { draft = newDraft(curT()); lastCount = -1; go({ name: 'new' }); },
   changeFormat: () => { draft = newDraft(curT(), true); lastCount = -1; go({ name: 'new' }); toast(tr('changeFormatHint')); },
+  deleteFromHome: async el => {
+    const t = getTournament(el.dataset.id);
+    if (!t || !(await ask(tr('confirmDelete', { name: t.name }), tr('deleteT')))) return;
+    removeTournament(t.id);
+    render();
+    toast(tr('deleted'));
+  },
   deleteT: async () => {
     const t = curT();
     if (!(await ask(tr('confirmDelete', { name: t.name }), tr('deleteT')))) return;

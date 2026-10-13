@@ -228,6 +228,7 @@ const da = {
   rematch: 'Ny turnering, samme spillere',
   againHint: 'Ny turnering beholder denne. Skift spilform erstatter den.',
   deleteT: 'Slet turnering',
+  deleteNamed: 'Slet {name}',
   confirmDelete: 'Slette "{name}"? Det kan ikke fortrydes.',
   deleted: 'Turneringen er slettet',
 
@@ -542,6 +543,7 @@ const en = {
   rematch: 'New tournament, same players',
   againHint: 'New tournament keeps this one. Change format replaces it.',
   deleteT: 'Delete tournament',
+  deleteNamed: 'Delete {name}',
   confirmDelete: 'Delete "{name}"? This can’t be undone.',
   deleted: 'Tournament deleted',
 
