@@ -376,19 +376,23 @@ export function qualifiers(t) {
 }
 
 export function startPlayoff(t) {
+  // Only formats with a playoff, and only once; a knockout already is its bracket.
+  if (!hasPlayoff(t) || t.bracket) return false;
   const q = qualifiers(t);
+  if (q.length < 2) return false;
   t.bracket = makeBracket(q.map(x => x.id), { bronze: t.settings.bronze, labels: q.map(x => x.label) });
   if (t.format === 'groups') {
     const groupOf = id => t.groups.find(g => g.players.includes(id))?.name;
     separateGroups(t.bracket.rounds[0], groupOf);
     syncBracket(t.bracket);
   }
+  return true;
 }
 
 export function podium(t) {
   if (t.bracket) {
     const final = t.bracket.rounds[t.bracket.rounds.length - 1][0];
-    if (!isDone(final)) return null;
+    if (!isDone(final) || !winnerOf(final)) return null;
     return { first: winnerOf(final), second: loserOf(final), third: t.bracket.bronze ? winnerOf(t.bracket.bronze) : null };
   }
   if (t.format !== 'knockout' && !hasPlayoff(t) && stageComplete(t)) {

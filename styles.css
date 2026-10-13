@@ -836,3 +836,4 @@ button.bk{ display:block; width:100%; text-align:left; }
 .logr .tools{ flex-wrap:wrap; justify-content:flex-end; row-gap:4px; }
 .warn-note{ background:var(--danger-soft); color:var(--ink); }
 .hdr .tag{ flex:none; }
+.share-img{ display:block; width:100%; margin-top:14px; border-radius:18px; box-shadow:var(--shadow-1); }

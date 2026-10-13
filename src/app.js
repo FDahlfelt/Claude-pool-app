@@ -3,6 +3,7 @@ import { db, load, save, getTournament, upsertTournament, removeTournament, clea
 import { tr, setLang, getLang, LANGS } from './i18n.js';
 import { encode, decode, isTournament, summaryText } from './share.js';
 import * as Live from './live.js';
+import { renderCard } from './card.js';
 
 const VERSION = '2.2.0';
 const $ = (s, el = document) => el.querySelector(s);
@@ -600,7 +601,7 @@ function championCard(t, pod) {
     ${pball(t, pod.first, 64, 'lift rise')}
     <div class="t-hero rise">${n(pod.first)}</div>
     <div class="podium">${col(pod.second, 2, 62, 's')}${col(pod.first, 1, 92, '')}${col(pod.third, 3, 44, 'b')}</div>
-    <button class="btn btn-g btn-sm" data-act="shareText">${ICON.share}<span>${tr('shareResult')}</span></button>
+    <button class="btn btn-g btn-sm" data-act="shareImage">${ICON.share}<span>${tr('shareResult')}</span></button>
   </section>`;
 }
 
@@ -832,7 +833,7 @@ function tabManage(t) {
       <p class="t-sm ink-2">${tr('shareBackupHint')}</p>
       <div class="row wrap">
         <button class="btn btn-s" data-act="share">${ICON.share}<span>${tr('share')}</span></button>
-        ${framed ? '' : `<button class="btn btn-s" data-act="download">${ICON.import}<span>${tr('downloadFile')}</span></button>`}
+        ${canSaveFiles() ? `<button class="btn btn-s" data-act="download">${ICON.import}<span>${tr('downloadFile')}</span></button>` : ''}
       </div>
     </section>
     <section class="stack">
@@ -1054,7 +1055,7 @@ function viewSettings() {
       <p class="t-sm ink-2">${tr('backupAllHint')}</p>
       <div class="row wrap">
         <button class="btn btn-s" data-act="backupCode">${ICON.copy}<span>${tr('copyBackup')}</span></button>
-        ${framed ? '' : `<button class="btn btn-s" data-act="backupFile">${ICON.import}<span>${tr('downloadFile')}</span></button>`}
+        ${canSaveFiles() ? `<button class="btn btn-s" data-act="backupFile">${ICON.import}<span>${tr('downloadFile')}</span></button>` : ''}
         <button class="btn btn-s" data-act="import">${ICON.import}<span>${tr('importBtn')}</span></button>
       </div>
     </section>
@@ -1142,7 +1143,8 @@ async function shareDialog(t) {
       </section>`
     : '';
   openSheet(`<div class="grab"></div><h3 class="t-h2">${tr('share')}</h3>${live}
-    <section class="stack" style="margin-top:14px">
+    <button class="btn btn-g btn-block" style="margin-top:14px" data-act="shareImage">${ICON.share}<span>${tr('shareImage')}</span></button>
+    <section class="stack" style="margin-top:18px">
       <span class="t-over">${tr('shareTextTitle')}</span>
       <pre class="card-2 mono t-xs" id="shText" style="padding:12px;white-space:pre-wrap;max-height:200px;overflow:auto;margin:0">${esc(text)}</pre>
       <div class="row wrap"><button class="btn btn-p btn-sm" data-act="copy" data-src="shText">${ICON.copy}<span>${tr('copyText')}</span></button>
@@ -1172,12 +1174,46 @@ async function copyText(text, el) {
   }
 }
 
-function downloadJSON(obj, filename) {
+// Files: the Claude viewer offers them through its downloads capability (it asks the viewer
+// first); a normal browser takes a plain download link.
+let downloads = null;
+window.claude?.use?.('downloads').then(d => { if (d) { downloads = d; render(); } }).catch(() => {});
+const canSaveFiles = () => !framed || !!downloads;
+
+async function saveFile(filename, data) {
+  if (downloads) {
+    try { await downloads.save({ filename, data }); toast(tr('fileSaved')); return true; }
+    catch (e) { if (e?.code !== 'declined') toast(tr('fileFailed')); return false; }
+  }
+  if (framed) { toast(tr('fileFailed')); return false; }
   const a = document.createElement('a');
-  a.href = URL.createObjectURL(new Blob([JSON.stringify(obj, null, 2)], { type: 'application/json' }));
+  a.href = URL.createObjectURL(data instanceof Blob ? data : new Blob([data], { type: 'application/json' }));
   a.download = filename;
   a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+  return true;
+}
+const saveJSON = (obj, filename) => saveFile(filename, JSON.stringify(obj, null, 2));
+
+/** The result card as an image to save or send. */
+async function imageDialog(t) {
+  openSheet(`<div class="grab"></div><h3 class="t-h2">${tr('shareImage')}</h3><p class="t-sm ink-3" style="margin-top:6px">${tr('makingImage')}</p>`);
+  const canvas = await renderCard(t, tr, ballNo);
+  const blob = await new Promise(res => canvas.toBlob(res, 'image/png'));
+  const file = new File([blob], `${slug(t.name)}.png`, { type: 'image/png' });
+  const url = URL.createObjectURL(blob);
+  const canShareFile = !framed && navigator.canShare?.({ files: [file] });
+  openSheet(`<div class="grab"></div><h3 class="t-h2">${tr('shareImage')}</h3>
+    <img class="share-img" src="${url}" alt="${esc(t.name)}">
+    <div class="row wrap" style="margin-top:14px">
+      ${canShareFile ? `<button class="btn btn-p btn-sm" id="imgShare">${ICON.share}<span>${tr('shareVia')}</span></button>` : ''}
+      ${canSaveFiles() ? `<button class="btn ${canShareFile ? 'btn-s' : 'btn-p'} btn-sm" id="imgSave">${ICON.import}<span>${tr('saveImage')}</span></button>` : ''}
+    </div>
+    <p class="t-xs ink-3" style="margin-top:10px">${tr('imageHint')}</p>
+    <button class="btn btn-ghost btn-block" data-act="closeModal">${tr('close')}</button>`);
+  $('#imgSave')?.addEventListener('click', () => saveFile(file.name, blob));
+  $('#imgShare')?.addEventListener('click', async () => { try { await navigator.share({ files: [file], title: t.name }); } catch { /* cancelled */ } });
+  $('#modal').addEventListener('close', () => URL.revokeObjectURL(url), { once: true });
 }
 const slug = s => s.toLowerCase().replace(/[^a-z0-9æøå]+/gi, '-').replace(/^-|-$/g, '') || 'pool';
 
@@ -1326,14 +1362,15 @@ const actions = {
   copy: el => { const src = $('#' + el.dataset.src); copyText(src.value ?? src.textContent, src); },
   copyLink: () => { const el = $('#shCode'); if (el?.dataset.link) copyText(el.dataset.link, el); },
   nativeShare: async () => { const t = curT(); try { await navigator.share({ title: t.name, text: summaryText(t, tr) }); } catch { /* cancelled */ } },
-  download: () => { const t = curT(); downloadJSON(t, `${slug(t.name)}.json`); },
+  download: () => { const t = curT(); saveJSON(t, `${slug(t.name)}.json`); },
+  shareImage: () => { const t = curT(); if (t) imageDialog(t); },
   backupCode: async () => {
     const code = await encode({ tournaments: db.tournaments });
     openSheet(`<div class="grab"></div><h3 class="t-h2">${tr('copyBackup')}</h3><p class="t-sm ink-3" style="margin:4px 0 14px">${tr('backupCodeHint')}</p>
       <div class="field" style="height:auto;padding:12px 14px"><textarea id="bkCode" rows="6" readonly class="mono" aria-label="${tr('copyBackup')}">${esc(code)}</textarea></div>
       <div class="modal-actions"><button class="btn btn-s" data-act="closeModal">${tr('close')}</button><button class="btn btn-p" data-act="copy" data-src="bkCode">${ICON.copy}<span>${tr('copyCode')}</span></button></div>`);
   },
-  backupFile: () => downloadJSON({ tournaments: db.tournaments }, `pool-backup-${new Date().toISOString().slice(0, 10)}.json`),
+  backupFile: () => saveJSON({ tournaments: db.tournaments }, `pool-backup-${new Date().toISOString().slice(0, 10)}.json`),
   saveShared: () => {
     const t = sharedCache?.t;
     if (!t) return;

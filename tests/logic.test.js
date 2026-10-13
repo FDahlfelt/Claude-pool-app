@@ -193,3 +193,18 @@ test('balls left are recorded per frame; an early black counts as every ball lef
   L.clearMatch(t, m);
   assert.deepEqual(L.ballsLeft(m), [0, 0]);
 });
+
+test('starting a playoff is refused for knockout, without a playoff, or twice', () => {
+  const ko = L.createTournament({ name: 'k', format: 'knockout', names: names(6), settings: {} });
+  const before = JSON.stringify(ko.bracket);
+  assert.equal(L.startPlayoff(ko), false);
+  assert.equal(JSON.stringify(ko.bracket), before);
+  const league = L.createTournament({ name: 'l', format: 'league', names: names(4), settings: { playoffSize: 0 } });
+  assert.equal(L.startPlayoff(league), false);
+  assert.equal(league.bracket, null);
+  const po = L.createTournament({ name: 'p', format: 'league', names: names(4), settings: { playoffSize: 2 } });
+  assert.equal(L.startPlayoff(po), true);
+  const first = po.bracket;
+  assert.equal(L.startPlayoff(po), false);
+  assert.equal(po.bracket, first);
+});
