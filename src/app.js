@@ -5,7 +5,7 @@ import { encode, decode, isTournament, summaryText } from './share.js';
 import * as Live from './live.js';
 import { renderCard } from './card.js';
 
-const VERSION = '2.2.0';
+const VERSION = '2.3.0';
 const $ = (s, el = document) => el.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const pct = x => Math.round(x * 100) + '%';
@@ -1174,6 +1174,8 @@ async function importText(text) {
   else if (data?.mode !== undefined || (Array.isArray(data?.players) && Array.isArray(data?.rounds))) list = [L.migrateV1(data)];
   list = list.filter(isTournament);
   if (!list.length) return toast(tr('badCode'));
+  // An imported copy is this device's own; only the live original lives in the shared database.
+  list.forEach(t => { delete t.live; });
   const clashes = list.filter(t => getTournament(t.id)).length;
   if (clashes && !(await ask(tr('replaceExisting', { n: clashes }), tr('replace'), false))) return;
   list.forEach(t => upsertTournament(t));
@@ -1482,6 +1484,7 @@ const actions = {
   saveShared: () => {
     const t = sharedCache?.t;
     if (!t) return;
+    delete t.live;
     upsertTournament(t);
     toast(tr('savedCopy'));
     go({ name: 't', id: t.id, tab: 'overview' });
@@ -1683,7 +1686,7 @@ document.addEventListener('change', e => {
 // ---------- App install / offline ----------
 let installEvt = null;
 window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); installEvt = e; });
-if ('serviceWorker' in navigator && !framed && location.protocol === 'https:') {
+if ('serviceWorker' in navigator && !framed && (location.protocol === 'https:' || location.hostname === 'localhost')) {
   navigator.serviceWorker.register('sw.js').catch(() => { /* offline support unavailable */ });
 }
 

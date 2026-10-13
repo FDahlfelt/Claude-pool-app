@@ -491,6 +491,7 @@ export function setResult(t, m, sa, sb, balls) {
   const [fa, fb] = score({ frames: m.frames });
   if (fa !== sa || fb !== sb) m.frames = [];
   if (balls) m.balls = balls; else delete m.balls;
+  delete m.wo; // a real score replaces a walkover
   m.sa = sa; m.sb = sb;
   m.endedAt = Date.now();
   m.startedAt = m.startedAt || m.endedAt;

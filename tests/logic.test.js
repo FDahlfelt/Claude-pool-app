@@ -271,3 +271,12 @@ test('head to head adds up meetings across tournaments by name', () => {
   const h = L.headToHead([t1, t2], 'Ann', 'Bo');
   assert.deepEqual([h.a.w, h.b.w, h.a.ff, h.b.ff, h.meetings.length], [1, 0, 3, 1, 1]);
 });
+
+test('a real score replaces a walkover', () => {
+  const t = L.createTournament({ name: 'w', format: 'league', names: names(3), settings: { raceTo: 3 } });
+  const m = L.stageMatches(t)[0];
+  L.setWalkover(t, m, 'a', 3);
+  L.setResult(t, m, 1, 3);
+  assert.equal(m.wo, undefined);
+  assert.equal(L.playerStats(t).matches, 1);
+});
