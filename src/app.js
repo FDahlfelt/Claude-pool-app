@@ -127,6 +127,7 @@ function render() {
 function commit(t) {
   t.updatedAt = Date.now();
   L.syncBracket(t.bracket);
+  L.applyWithdrawals(t);
   if (!upsertTournament(t)) toast(tr('saveFailed'));
   render();
   return t.live ? Live.push(t) : Promise.resolve(true);
@@ -206,6 +207,7 @@ function tabbar(active, sub = false) {
 }
 
 const fmtName = f => tr('fmt_' + f);
+const gone = (t, id) => !!t.players.find(p => p.id === id)?.withdrawn;
 const pname = (t, id) => (id === L.BYE ? tr('bye') : id ? esc(L.playerName(t, id)) : tr('tbd'));
 
 function roundName(fromEnd, r) {
@@ -613,7 +615,8 @@ function matchRow(t, m, { start = false, ctx = false } = {}) {
   const w = L.winnerOf(m);
   const cls = id => (done ? (id === w ? 'win' : 'lose') : '');
   let small = '';
-  if (live) small = `<small>${m.table ? tr('tableN', { n: m.table }) : tr('live')}</small>`;
+  if (m.wo) small = `<small>${tr('woTag')}</small>`;
+  else if (live) small = `<small>${m.table ? tr('tableN', { n: m.table }) : tr('live')}</small>`;
   else if (ctx) small = `<small>${esc(ctxLabel(t, m))}</small>`;
   else if (m.group) small = `<small class="grp-s">${tr('groupN', { g: m.group })}</small>`;
   const mid = done || live ? `${a}–${b}` : start ? '' : `<span class="t-sm ink-3" style="font-family:var(--f-body)">${tr('vs')}</span>`;
@@ -688,7 +691,7 @@ function standingsTable(t, rows, cut, cutLabel) {
     if (cut && i === cut) body += `<tr class="cutrow"><td colspan="${cols}"><div class="cut">${cutLabel}</div></td></tr>`;
     body += `<tr>
       <td><span class="pos ${finished && i === 0 ? 'gold' : i < cut ? 'adv' : ''}">${i + 1}</span></td>
-      <td class="l nm"><div class="row">${pball(t, r.id, 22)}<span class="ell">${esc(r.name)}</span></div></td>
+      <td class="l nm"><div class="row ${gone(t, r.id) ? 'gone' : ''}" ${gone(t, r.id) ? `title="${tr('withdrawn')}"` : ''}>${pball(t, r.id, 22, gone(t, r.id) ? 'dim' : '')}<span class="ell">${esc(r.name)}</span></div></td>
       <td>${r.p}</td><td>${r.w}</td><td>${r.l}</td>
       <td class="hide-xs">${r.ff}–${r.fa}</td><td>${sign(r.diff)}</td>${balls ? `<td>${sign(r.bdiff)}</td>` : ''}${swiss ? `<td>${r.bh}</td>` : ''}
       <td class="p">${r.pts}</td>
@@ -697,7 +700,7 @@ function standingsTable(t, rows, cut, cutLabel) {
   });
   return `<div class="card tbl-wrap"><table class="st">
     <thead><tr><th>#</th><th class="l">${tr('player')}</th><th title="${tr('colPLong')}">${tr('colP')}</th><th>${tr('colW')}</th><th>${tr('colL')}</th>
-      <th class="hide-xs">${tr('colFrames')}</th><th title="${tr('colFrameDiffLong')}">+/−</th>${balls ? `<th title="${tr('colBallsLong')}">${tr('colBalls')}</th>` : ''}${swiss ? `<th title="Buchholz">BH</th>` : ''}<th>${tr('colPts')}</th><th class="hide-xs">${tr('colForm')}</th></tr></thead>
+      <th class="hide-xs">${tr('colFrames')}</th><th title="${tr('colFrameDiffLong')}">+/−</th>${balls ? `<th title="${tr('colBallsLong')}"><span class="hide-xs">${tr('colBalls')}</span><span class="xs-only">${tr('colBallsShort')}</span></th>` : ''}${swiss ? `<th title="Buchholz">BH</th>` : ''}<th class="p-h">${tr('colPts')}</th><th class="hide-xs">${tr('colForm')}</th></tr></thead>
     <tbody>${body}</tbody></table></div>`;
 }
 
@@ -751,7 +754,7 @@ function bmatch(t, m, isFinal) {
   const w = L.winnerOf(m);
   const line = (id, s) => {
     const cls = !id ? 'tbd' : done ? (id === w ? 'win' : 'lose') : '';
-    return `<div class="bkl ${cls}"><span class="seed">${esc(labels[id] || '')}</span>${pball(t, id, 18)}<span class="nm">${pname(t, id)}</span><span class="sc">${done || live ? s : ''}</span></div>`;
+    return `<div class="bkl ${cls}"><span class="seed">${esc(labels[id] || '')}</span>${pball(t, id, 18)}<span class="nm">${pname(t, id)}</span><span class="sc">${m.wo && done ? (id === w ? tr('woTag') : '') : done || live ? s : ''}</span></div>`;
   };
   const cls = `bk ${live ? 'live' : ''} ${!ready ? 'wait' : ''} ${isFinal && ready ? 'final' : ''}`;
   return `<button class="${cls}" data-act="openMatch" data-mid="${m.id}" ${ready ? '' : 'disabled'}>${line(m.a, a)}${line(m.b, b)}</button>`;
@@ -815,7 +818,10 @@ function tabManage(t) {
       <div class="sec"><span class="t-over">${tr('tournament')}</span></div>
       <div class="field"><input id="m-name" value="${esc(t.name)}" maxlength="60" aria-label="${tr('tName')}"></div>
       <span class="lbl" style="margin:4px 0 0">${tr('renamePlayers')}</span>
-      <div class="stack" style="gap:8px">${t.players.map(p => `<div class="field">${pball(t, p.id, 26)}<input id="m-p-${p.id}" data-rename="${p.id}" value="${esc(p.name)}" maxlength="30" aria-label="${esc(p.name)}"></div>`).join('')}</div>
+      <div class="stack" style="gap:8px">${t.players.map(p => `<div class="field ${p.withdrawn ? 'gone' : ''}">${pball(t, p.id, 26, p.withdrawn ? 'dim' : '')}<input id="m-p-${p.id}" data-rename="${p.id}" value="${esc(p.name)}" maxlength="30" aria-label="${esc(p.name)}">
+        ${p.withdrawn
+          ? `<button class="btn btn-ghost btn-sm" data-act="reinstate" data-id="${p.id}">${tr('reinstate')}</button>`
+          : L.phase(t) !== 'done' ? `<button class="btn btn-ghost btn-sm" data-act="withdraw" data-id="${p.id}" title="${tr('withdrawHint')}">${tr('withdraw')}</button>` : ''}</div>`).join('')}</div>
       <button class="btn btn-p" data-act="saveNames">${tr('save')}</button>
     </section>
     <section class="stack">
@@ -911,7 +917,7 @@ function viewMatch(t, mid) {
     const finished = L.phase(t) === 'done';
     banner = `<section class="card result banner-in">
       ${pball(t, w, 44, 'lift')}
-      <div class="t-h2">${tr('wonBy', { name: esc(L.playerName(t, w)), a: Math.max(a, b), b: Math.min(a, b) })}</div>
+      <div class="t-h2">${m.wo ? tr('wonWo', { name: esc(L.playerName(t, w)) }) : tr('wonBy', { name: esc(L.playerName(t, w)), a: Math.max(a, b), b: Math.min(a, b) })}</div>
       ${finished ? `<button class="btn btn-g btn-block" data-act="nav" data-to="#/t/${t.id}/overview">${ICON.trophy}<span>${tr('seeChampion')}</span></button>`
         : nxt ? `<button class="btn btn-p btn-block" data-act="openMatch" data-mid="${nxt.id}"><span class="ell">${tr('nextMatch')}: ${pname(t, nxt.a)} – ${pname(t, nxt.b)}</span></button>` : ''}
       <button class="btn btn-s btn-block" data-act="nav" data-to="#/t/${t.id}/overview">${tr('toOverview')}</button>
@@ -946,6 +952,15 @@ function viewMatch(t, mid) {
     ${frames.length ? `<section class="stack"><div class="sec"><span class="t-over">${tr('frames')}</span><span class="t-xs ink-3 tnum">${frames.length}</span></div><div class="card">${log}</div></section>` : ''}
     </div>
   </main>`;
+}
+
+/** Sheet: who gets the match without it being played. */
+function walkoverSheet(t, m, race) {
+  const pick = s => `<button class="btn btn-s btn-block" data-act="woPick" data-side="${s}" style="justify-content:flex-start">${pball(t, m[s], 24)}<span class="ell">${tr('woWins', { name: esc(L.playerName(t, m[s])) })}</span></button>`;
+  openSheet(`<div class="grab"></div><h3 class="t-h2">${tr('walkover')}</h3>
+    <p class="t-sm ink-3" style="margin:6px 0 16px">${tr('woHint', { n: race })}</p>
+    <div class="stack" style="gap:8px">${pick('a')}${pick('b')}</div>
+    <button class="btn btn-ghost btn-block" style="margin-top:8px" data-act="closeModal">${tr('cancel')}</button>`);
 }
 
 /** Sheet: how many balls the loser of frame i had left. */
@@ -984,7 +999,8 @@ function quickResult(t, m, race) {
   openDialog(`<h3 class="t-h2">${tr('enterResult')}</h3><p class="t-sm ink-3">${tr('raceShort', { n: race })}</p>
     <div class="qr" id="qr"></div><p class="t-sm center" id="qrHint" style="margin-top:12px"></p>
     ${useBalls ? '<div id="qrBalls" style="margin-top:16px"></div>' : ''}
-    <div class="modal-actions"><button class="btn btn-s" data-act="closeModal">${tr('cancel')}</button><button class="btn btn-p" id="qrSave">${tr('save')}</button></div>`);
+    <div class="modal-actions"><button class="btn btn-s" data-act="closeModal">${tr('cancel')}</button><button class="btn btn-p" id="qrSave">${tr('save')}</button></div>
+    <button class="btn btn-ghost btn-block btn-sm" style="margin-top:8px" data-act="walkover">${tr('woBtn')}</button>`);
   draw();
   $('#modal').onclick = e => {
     const s = e.target.closest('[data-q]');
@@ -1407,6 +1423,26 @@ const actions = {
   toggleBR: el => { const t = curT(); const f = curMatch().frames[+el.dataset.i]; f.br = !f.br; commit(t); },
   setTable: el => { const t = curT(); curMatch().table = +el.dataset.n; commit(t); },
   quickResult: () => { const t = curT(); const info = L.matchInfo(t, route.mid); quickResult(t, info.m, info.race); },
+  walkover: () => { const t = curT(); const info = L.matchInfo(t, route.mid); walkoverSheet(t, info.m, info.race); },
+  woPick: el => {
+    const t = curT(); const info = L.matchInfo(t, route.mid);
+    L.setWalkover(t, info.m, el.dataset.side, info.race);
+    closeModal();
+    afterResult(t, info.m);
+  },
+  withdraw: async el => {
+    const t = curT(); const name = L.playerName(t, el.dataset.id);
+    if (!(await ask(tr('confirmWithdraw', { name }), tr('withdraw')))) return;
+    L.withdrawPlayer(t, el.dataset.id);
+    commit(t);
+    toast(tr('withdrawnToast', { name }));
+  },
+  reinstate: el => {
+    const t = curT();
+    L.reinstatePlayer(t, el.dataset.id);
+    commit(t);
+    toast(tr('reinstatedToast', { name: L.playerName(t, el.dataset.id) }));
+  },
   resetMatch: async () => {
     const t = curT();
     if (!(await ask(tr('confirmResetMatch'), tr('resetMatch')))) return;
@@ -1491,7 +1527,7 @@ const actions = {
 // Actions that change a tournament; blocked for people who may only watch a live tournament.
 const MUTATING = new Set(['startMatch', 'frame', 'undo', 'swapBreak', 'toggleBR', 'setTable', 'quickResult', 'resetMatch',
   'editBalls', 'pickBalls', 'pickBlack', 'skipBalls', 'nextRound', 'startPlayoff', 'resetPlayoff', 'saveNames',
-  'stepSetting', 'setSetting', 'toggleSetting', 'changeFormat', 'goLive', 'stopLive', 'walkover', 'withdraw']);
+  'stepSetting', 'setSetting', 'toggleSetting', 'changeFormat', 'goLive', 'stopLive', 'walkover', 'woPick', 'withdraw', 'reinstate']);
 
 document.addEventListener('click', e => {
   const el = e.target.closest('[data-act]');

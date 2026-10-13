@@ -837,3 +837,8 @@ button.bk{ display:block; width:100%; text-align:left; }
 .warn-note{ background:var(--danger-soft); color:var(--ink); }
 .hdr .tag{ flex:none; }
 .share-img{ display:block; width:100%; margin-top:14px; border-radius:18px; box-shadow:var(--shadow-1); }
+.gone .ell, .field.gone input{ color:var(--ink-3); text-decoration:line-through; text-decoration-thickness:1.5px; }
+.field .btn-sm{ height:36px; padding:0 10px; flex:none; }
+.xs-only{ display:none; }
+@media (max-width:420px){ .xs-only{ display:inline; } table.st th .hide-xs{ display:none; } }
+@media (max-width:420px){ table.st td.p, table.st th.p-h{ padding-right:14px; } }

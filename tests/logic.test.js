@@ -208,3 +208,53 @@ test('starting a playoff is refused for knockout, without a playoff, or twice', 
   assert.equal(L.startPlayoff(po), false);
   assert.equal(po.bracket, first);
 });
+
+test('walkover counts race–0 in the standings but not in the stats', () => {
+  const t = L.createTournament({ name: 'w', format: 'league', names: names(3), settings: { raceTo: 3 } });
+  const m = L.stageMatches(t)[0];
+  L.setWalkover(t, m, 'b', 3);
+  assert.deepEqual([m.sa, m.sb, m.wo], [0, 3, 'wo']);
+  assert.equal(L.standingsFor(t)[0].id, m.b);
+  assert.equal(L.playerStats(t).matches, 0);
+  L.clearMatch(t, m);
+  assert.equal(m.wo, undefined);
+});
+
+test('a player who withdraws hands every open match to the opponent, and can come back', () => {
+  const t = L.createTournament({ name: 'w', format: 'league', names: names(5), settings: { raceTo: 3, playoffSize: 2 } });
+  const [gone] = t.players;
+  const played = L.stageMatches(t).find(m => m.a === gone.id || m.b === gone.id);
+  L.setResult(t, played, 3, 1);
+  L.withdrawPlayer(t, gone.id);
+  const theirs = L.stageMatches(t).filter(m => m.a === gone.id || m.b === gone.id);
+  assert.ok(theirs.every(L.isDone));
+  assert.ok(theirs.filter(m => m !== played).every(m => m.wo === 'withdraw' && L.winnerOf(m) !== gone.id));
+  assert.deepEqual([played.sa, played.sb], [3, 1], 'played results stay');
+  // They are left out of the playoff.
+  for (const m of L.stageMatches(t)) if (!L.isDone(m)) L.setResult(t, m, 3, 0);
+  assert.ok(L.qualifiers(t).every(q => q.id !== gone.id));
+  L.reinstatePlayer(t, gone.id);
+  assert.ok(theirs.filter(m => m !== played).every(m => !L.isDone(m)));
+  assert.deepEqual([played.sa, played.sb], [3, 1]);
+});
+
+test('withdrawing from a knockout gives the walkover in the bracket', () => {
+  const t = L.createTournament({ name: 'k', format: 'knockout', names: names(4), settings: { bronze: false } });
+  const [m1, m2] = t.bracket.rounds[0];
+  L.withdrawPlayer(t, m1.a);
+  assert.equal(L.winnerOf(m1), m1.b);
+  L.setResult(t, m2, 4, 0);
+  L.applyWithdrawals(t);
+  assert.equal(t.bracket.rounds[1][0].a, m1.b);
+});
+
+test('swiss pairing leaves out withdrawn players', () => {
+  const t = L.createTournament({ name: 's', format: 'swiss', names: names(6), settings: { swissRounds: 3, playoffSize: 0 } });
+  for (const m of t.rounds[0].matches) L.setResult(t, m, 3, 0);
+  const gone = t.players[0].id;
+  L.withdrawPlayer(t, gone);
+  L.nextSwissRound(t);
+  const r2 = t.rounds[1];
+  assert.ok(r2.matches.every(m => m.a !== gone && m.b !== gone));
+  assert.ok(!r2.byes.includes(gone));
+});

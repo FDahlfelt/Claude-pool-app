@@ -9,7 +9,7 @@
 //            overwrite each other.
 
 const COL = 'live';
-const MATCH_FIELDS = ['a', 'b', 'sa', 'sb', 'frames', 'startedAt', 'endedAt', 'table', 'firstBreak', 'balls', 'group'];
+const MATCH_FIELDS = ['a', 'b', 'sa', 'sb', 'frames', 'startedAt', 'endedAt', 'table', 'firstBreak', 'balls', 'group', 'wo'];
 
 // ---------- Pure conversion (tested in Node) ----------
 
@@ -55,6 +55,7 @@ export function fromShared(doc) {
     for (const k of MATCH_FIELDS) if (k !== 'frames') out[k] = m[k] ?? null;
     if (out.group === null) delete out.group;
     if (out.balls === null) delete out.balls;
+    if (out.wo === null) delete out.wo;
     return out;
   };
   return {

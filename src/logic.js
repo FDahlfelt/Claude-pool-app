@@ -355,7 +355,7 @@ export const canNextSwissRound = t =>
   t.format === 'swiss' && !t.bracket && t.rounds.length < t.settings.swissRounds && t.rounds[t.rounds.length - 1].matches.every(isDone);
 
 export function nextSwissRound(t) {
-  const order = standingsFor(t).map(r => r.id);
+  const order = standingsFor(t).map(r => r.id).filter(id => !isWithdrawn(t, id));
   const played = new Set(stageMatches(t).map(m => pairKey(m.a, m.b)));
   const byeHistory = new Set(t.rounds.flatMap(r => r.byes));
   t.rounds.push(swissRound(order, played, byeHistory));
@@ -367,12 +367,13 @@ export function qualifiers(t) {
   if (t.format === 'groups') {
     const tables = t.groups.map(g => standingsFor(t, g.players));
     const out = [];
+    const active = tables.map(tb => tb.filter(r => !isWithdrawn(t, r.id)));
     for (let r = 0; r < s.advance; r++) {
-      tables.forEach((tb, gi) => { if (tb[r]) out.push({ id: tb[r].id, label: t.groups[gi].name + (r + 1) }); });
+      active.forEach((tb, gi) => { if (tb[r]) out.push({ id: tb[r].id, label: t.groups[gi].name + (r + 1) }); });
     }
     return out;
   }
-  return standingsFor(t).slice(0, playoffCount(t.format, t.players.length, s)).map((r, i) => ({ id: r.id, label: '#' + (i + 1) }));
+  return standingsFor(t).filter(r => !isWithdrawn(t, r.id)).slice(0, playoffCount(t.format, t.players.length, s)).map((r, i) => ({ id: r.id, label: '#' + (i + 1) }));
 }
 
 export function startPlayoff(t) {
@@ -499,8 +500,57 @@ export function setResult(t, m, sa, sb, balls) {
 export function clearMatch(t, m) {
   Object.assign(m, { sa: null, sb: null, frames: [], startedAt: null, endedAt: null, table: null });
   delete m.balls;
+  delete m.wo;
   syncBracket(t.bracket);
 }
+
+/**
+ * Walkover: the match counts as won race–0 without being played.
+ * `reason` is 'wo' (entered by hand) or 'withdraw' (the opponent left the tournament).
+ */
+export function setWalkover(t, m, side, race, reason = 'wo') {
+  if (!isReady(m)) return;
+  Object.assign(m, { sa: side === 'a' ? race : 0, sb: side === 'b' ? race : 0, frames: [], wo: reason, endedAt: Date.now(), table: null });
+  m.startedAt = m.startedAt || m.endedAt;
+  delete m.balls;
+  syncBracket(t.bracket);
+}
+
+const isWithdrawn = (t, id) => !!t.players.find(p => p.id === id)?.withdrawn;
+
+/** Gives every open match of a player who withdrew to the opponent as a walkover. */
+function walkoverOpen(t) {
+  // Bracket matches only fill in as earlier ones finish, so repeat until nothing changes.
+  for (let changed = true; changed;) {
+    changed = false;
+    for (const m of allMatches(t)) {
+      if (!isReady(m) || isDone(m)) continue;
+      const wa = isWithdrawn(t, m.a), wb = isWithdrawn(t, m.b);
+      if (wa === wb) continue; // neither, or both gone: leave it to the people at the table
+      setWalkover(t, m, wa ? 'b' : 'a', matchInfo(t, m.id).race, 'withdraw');
+      changed = true;
+    }
+  }
+}
+
+export function withdrawPlayer(t, id) {
+  const p = t.players.find(x => x.id === id);
+  if (!p || p.withdrawn) return;
+  p.withdrawn = true;
+  walkoverOpen(t);
+}
+
+/** Undoes a withdrawal: the walkovers it caused are reopened. */
+export function reinstatePlayer(t, id) {
+  const p = t.players.find(x => x.id === id);
+  if (!p?.withdrawn) return;
+  delete p.withdrawn;
+  for (const m of allMatches(t)) if (m.wo === 'withdraw' && (m.a === id || m.b === id)) clearMatch(t, m);
+  walkoverOpen(t); // others who withdrew keep their walkovers
+}
+
+/** Keeps walkovers in step after new matches appear (a Swiss round, the playoff, a bracket step). */
+export const applyWithdrawals = t => { if (t.players.some(p => p.withdrawn)) walkoverOpen(t); };
 
 export const validScore = (a, b, race) => (a === race && b < race) || (b === race && a < race);
 
@@ -525,7 +575,7 @@ export function upNext(t) {
 
 export function playerStats(t) {
   const rows = new Map(t.players.map(p => [p.id, { id: p.id, name: p.name, p: 0, w: 0, l: 0, ff: 0, fa: 0, bf: 0, ba: 0, br: 0, blacks: 0, best: 0, cur: 0, shutouts: 0 }]));
-  const ms = allMatches(t).filter(m => isDone(m) && !isBye(m));
+  const ms = allMatches(t).filter(m => isDone(m) && !isBye(m) && !m.wo);
   const chrono = ms.map((m, i) => ({ m, i })).sort((x, y) => (x.m.endedAt || 0) - (y.m.endedAt || 0) || x.i - y.i).map(x => x.m);
   const highlights = { biggest: null, longest: null, frames: 0, br: 0, blacks: 0 };
   for (const m of chrono) {
