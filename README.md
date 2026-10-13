@@ -7,11 +7,12 @@ Ingen login, ingen server: alt gemmes på telefonen, og appen virker også uden 
 
 ## Hvad kan den?
 
-- **Fire spilformer**
+- **Fem spilformer**
   - **Alle mod alle** (én eller to gange) med valgfrit slutspil (top 2/4/8)
   - **Gruppespil** med 2–8 grupper, hvor de bedste fra hver gruppe går i slutspil. Første runde i slutspillet undgår så vidt muligt kampe mellem spillere fra samme gruppe.
   - **Schweizer system** – et fast antal runder, hvor man møder spillere med samme antal sejre og aldrig den samme to gange
   - **Knockout** med korrekt seedning og fri runde ("bye") til de bedste, når antallet ikke går op
+  - **Dobbelt knockout**: man er først ude efter to nederlag; taberside med krydsning, grand finale og valgfri omkamp
   - Antallet af kampe vises, før man starter.
 - **Live scoring**: tryk på vinderen af hver frame. Appen viser, hvem der breaker (på skift eller vinderen breaker), kan fortryde og fordeler kampene på flere borde.
 - **"Næste kamp"**: foreslår kampe med spillere, der ikke er i gang, og som har ventet længst.

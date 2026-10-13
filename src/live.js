@@ -16,7 +16,9 @@ const MATCH_FIELDS = ['a', 'b', 'sa', 'sb', 'frames', 'startedAt', 'endedAt', 't
 /** Same JSON for the same data whatever the key order, so comparisons are reliable. */
 export function stable(v) {
   if (Array.isArray(v)) return '[' + v.map(stable).join(',') + ']';
-  if (v && typeof v === 'object') return '{' + Object.keys(v).sort().filter(k => v[k] !== undefined).map(k => JSON.stringify(k) + ':' + stable(v[k])).join(',') + '}';
+  // A missing field and a null one mean the same here, so documents written by an older version
+  // compare equal and an upgrade doesn't resend every match.
+  if (v && typeof v === 'object') return '{' + Object.keys(v).sort().filter(k => v[k] !== undefined && v[k] !== null).map(k => JSON.stringify(k) + ':' + stable(v[k])).join(',') + '}';
   return JSON.stringify(v ?? null);
 }
 

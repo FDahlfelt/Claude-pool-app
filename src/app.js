@@ -5,7 +5,7 @@ import { encode, decode, isTournament, summaryText } from './share.js';
 import * as Live from './live.js';
 import { renderCard } from './card.js';
 
-const VERSION = '2.3.0';
+const VERSION = '2.4.0';
 const $ = (s, el = document) => el.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const pct = x => Math.round(x * 100) + '%';
@@ -213,15 +213,7 @@ const pname = (t, id) => (id === L.BYE ? tr('bye') : id === L.NONE ? '—' : id 
 function roundName(fromEnd, r) {
   return [tr('final'), tr('semis'), tr('quarters'), tr('last16')][fromEnd] ?? tr('roundN', { n: r + 1 });
 }
-function ctxLabel(t, m) {
-  const info = L.matchInfo(t, m.id);
-  if (!info) return '';
-  if (info.stage === 'stage') return tr('roundN', { n: info.round + 1 }) + (m.group ? ' · ' + tr('groupN', { g: m.group }) : '');
-  if (info.side === 'W') return info.fromEnd === 0 ? tr('wFinal') : `${tr('winnersSide')} · ${roundName(info.fromEnd, info.round)}`;
-  if (info.side === 'L') return info.fromEnd === 0 ? tr('lFinal') : tr('lRound', { n: info.lround + 1 });
-  if (info.side === 'G') return info.grand ? tr('grandReset') : tr('grandFinal');
-  return info.bronze ? tr('bronze') : roundName(info.fromEnd, info.round);
-}
+const ctxLabel = (t, m) => L.matchLabel(t, m, tr);
 function relTime(ts) {
   const diff = (ts - Date.now()) / 1000;
   const rtf = new Intl.RelativeTimeFormat(getLang(), { numeric: 'auto' });
@@ -487,7 +479,7 @@ function updateSummary(structure = false) {
   let html;
   if (err || dupes) html = `<span class="t-over">${tr('scheduleLbl')}</span><p class="t-body warn" style="color:#FFB4A6">${err ? tr('err_' + err) : tr('errDupes')}</p>`;
   else {
-    const per = L.isBracketFormat(draft.format) ? p.per[1] : p.per[0] === p.per[1] ? p.per[0] : `${p.per[0]}–${p.per[1]}`;
+    const per = draft.format === 'double' ? p.per[0] : draft.format === 'knockout' ? p.per[1] : p.per[0] === p.per[1] ? p.per[0] : `${p.per[0]}–${p.per[1]}`;
     const parts = [];
     if (p.stage) parts.push(tr('sumStage', { n: p.stage }));
     if (p.playoff) parts.push(tr(draft.format === 'double' ? (draft.gfReset ? 'sumDouble' : 'sumKo') : draft.format === 'knockout' ? 'sumKo' : 'sumPlayoff', { n: p.playoff }));
@@ -552,6 +544,13 @@ function currentRound(t) {
 
 /** One tick per match: played, live, waiting, then the playoff in gold outline. */
 function ticks(t) {
+  if (t.format === 'double') {
+    // Which losers' slots stay empty is only known as it goes, so draw what the count says.
+    const { done, total } = L.progress(t);
+    const live = L.allMatches(t).filter(L.isLive).length;
+    if (total > 64) return '';
+    return `<div class="ticks" aria-hidden="true">${[...Array(done).fill('d'), ...Array(live).fill('l'), ...Array(Math.max(0, total - done - live)).fill('')].map(c => `<i class="${c}"></i>`).join('')}</div>`;
+  }
   const st = L.stageMatches(t).map(m => (L.isDone(m) ? 'd' : L.isLive(m) ? 'l' : ''));
   const p = L.plan(t.format, t.players.length, t.settings);
   let ko;
@@ -787,16 +786,15 @@ function tabBracket(t) {
   }
   if (t.bracket.lower) return doubleBracket(t);
   const R = t.bracket.rounds;
-  let html = `<div class="bracket-scroll"><div class="brk" style="--cols:${R.length}">`;
-  R.forEach((ms, r) => {
-    const last = r === R.length - 1;
-    const race = last ? t.settings.finalRace : t.settings.koRace;
-    html += `<div class="brk-col"><div class="bk-h"><span>${last ? '🏆 ' : ''}${roundName(R.length - 1 - r, r)}</span><span class="tnum">${tr('raceShort', { n: race })}</span></div>
-      <div class="brk-body">${ms.map(m => bmatch(t, m, last)).join('')}
-      ${last && t.bracket.bronze ? `<div class="bronze-box"><div class="bk-h"><span>${tr('bronze')}</span><span>${tr('raceShort', { n: t.settings.koRace })}</span></div>${bmatch(t, t.bracket.bronze, false)}</div>` : ''}
-      </div></div>`;
+  const bronze = t.bracket.bronze
+    ? `<div class="bronze-box"><div class="bk-h"><span>${tr('bronze')}</span><span>${tr('raceShort', { n: t.settings.koRace })}</span></div>${bmatch(t, t.bracket.bronze, false)}</div>`
+    : '';
+  let html = bracketColumns(t, R, {
+    name: r => (r === R.length - 1 ? '🏆 ' : '') + roundName(R.length - 1 - r, r),
+    race: r => (r === R.length - 1 ? t.settings.finalRace : t.settings.koRace),
+    isFinal: r => r === R.length - 1,
+    after: r => (r === R.length - 1 ? bronze : ''),
   });
-  html += '</div></div>';
   const pod = L.podium(t);
   if (pod) html += championCard(t, pod);
   if (!L.isBracketFormat(t.format)) html += `<div class="row center"><button class="btn btn-ghost btn-sm" data-act="resetPlayoff">${tr('resetPlayoff')}</button></div>`;
@@ -804,13 +802,17 @@ function tabBracket(t) {
 }
 
 /** Double knockout: the winners' side, the losers' side and the grand final. */
+/** Bracket rounds as scrollable columns; shared by the single and the double knockout views. */
+function bracketColumns(t, rounds, { name, race, isFinal = () => false, after = () => '' }) {
+  return `<div class="bracket-scroll"><div class="brk" style="--cols:${rounds.length}">${rounds.map((ms, r) =>
+    `<div class="brk-col"><div class="bk-h"><span>${name(r)}</span><span class="tnum">${tr('raceShort', { n: race(r) })}</span></div>
+      <div class="brk-body">${ms.filter(m => m.a !== L.NONE).map(m => bmatch(t, m, isFinal(r))).join('')}${after(r)}</div></div>`).join('')}</div></div>`;
+}
+
 function doubleBracket(t) {
   const br = t.bracket, R = br.rounds, Lo = br.lower;
-  const ko = tr('raceShort', { n: t.settings.koRace });
-  const visible = m => m.a !== L.NONE; // empty losers' slots are left out
-  const cols = (rounds, name) => `<div class="bracket-scroll"><div class="brk" style="--cols:${rounds.length}">${rounds.map((ms, r) =>
-    `<div class="brk-col"><div class="bk-h"><span>${name(r)}</span><span class="tnum">${ko}</span></div>
-      <div class="brk-body">${ms.filter(visible).map(m => bmatch(t, m, false)).join('')}</div></div>`).join('')}</div></div>`;
+  const ko = () => t.settings.koRace;
+  const cols = (rounds, name) => bracketColumns(t, rounds, { name, race: ko });
   const [gf, reset] = br.grand;
   const resetBox = !reset ? '' : L.isBye(reset) ? '' : reset.a
     ? `<div class="bronze-box"><div class="bk-h"><span>${tr('grandReset')}</span><span>${tr('raceShort', { n: t.settings.finalRace })}</span></div>${bmatch(t, reset, true)}</div>`

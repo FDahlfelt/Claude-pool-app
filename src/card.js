@@ -63,20 +63,10 @@ function plan(t, tr, ballNo) {
   if (t.format === 'groups') t.groups.forEach(g => table(L.standingsFor(t, g.players), tr('groupN', { g: g.name }), t.settings.advance));
   else if (!L.isBracketFormat(t.format)) table(L.standingsFor(t), pod ? tr('stageTable') : null, L.hasPlayoff(t) ? L.playoffCount(t.format, t.players.length, t.settings) : 0);
   if (t.bracket) {
-    const R = t.bracket.rounds;
-    const label = m => {
-      const i = L.matchInfo(t, m.id);
-      if (i.side === 'G') return i.grand ? tr('grandReset') : tr('grandFinal');
-      if (i.side === 'L') return i.fromEnd === 0 ? tr('lFinal') : tr('lRound', { n: i.lround + 1 });
-      if (i.side === 'W' && i.fromEnd === 0) return tr('wFinal');
-      if (i.bronze) return tr('bronze');
-      return [tr('finalOne'), tr('semiOne'), tr('quarterOne')][i.fromEnd] || tr('roundN', { n: i.round + 1 });
-    };
-    // Latest round first; the bronze match sits right after the final.
-    const order = m => { const i = L.matchInfo(t, m.id); return i.bronze ? R.length - 1.5 : i.round; };
+    // Latest first, in the order the bracket was played (losers' rounds between winners' rounds).
     const lines = L.bracketMatches(t).filter(m => L.isDone(m) && !L.isBye(m))
-      .sort((x, y) => order(y) - order(x))
-      .map(m => ({ m, label: label(m) }));
+      .map(m => ({ m, order: L.matchInfo(t, m.id).order ?? 0, label: L.matchLabel(t, m, tr, { short: true }) }))
+      .sort((x, y) => y.order - x.order);
     if (lines.length) {
       items.push({ kind: 'label', text: tr('playoff'), h: 70 });
       lines.slice(0, 14).forEach(l => items.push({ kind: 'ko', ...l, h: 66 }));

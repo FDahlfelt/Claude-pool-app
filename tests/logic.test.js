@@ -325,3 +325,37 @@ test('double knockout: the losers\' side has to beat the champion twice', () => 
   L.setResult(t, reset, t.settings.finalRace, 2);
   assert.equal(L.podium(t).first, gf.a);
 });
+
+test('a bracket match that gets new players starts clean (no old walkover)', () => {
+  const t = L.createTournament({ name: 'd', format: 'double', names: names(4), settings: {} });
+  const [w1, w2] = t.bracket.rounds[0];
+  L.setResult(t, w1, 4, 0); L.setResult(t, w2, 4, 0);
+  const lr1 = t.bracket.lower[0][0];
+  L.setWalkover(t, lr1, 'a', 4);
+  L.clearMatch(t, w1); L.setResult(t, w1, 0, 4); // a different player drops into the losers' side
+  assert.equal(lr1.wo, undefined);
+  assert.equal(lr1.sa, null);
+});
+
+test('bracket order: every losers\' match comes after the matches that feed it', () => {
+  for (const n of [5, 8, 13, 16]) {
+    const t = L.createTournament({ name: 'd', format: 'double', names: names(n), settings: {} });
+    const order = m => L.matchInfo(t, m.id).order;
+    for (const round of t.bracket.lower) for (const m of round) {
+      for (const [side, r, i] of m.src) {
+        const from = side === 'W' ? t.bracket.rounds[r][i] : t.bracket.lower[r][i];
+        assert.ok(order(from) < order(m), `n=${n}`);
+      }
+    }
+    const [gf] = t.bracket.grand;
+    assert.ok(L.bracketMatches(t).every(m => m === gf || m === t.bracket.grand[1] || order(m) < order(gf)));
+  }
+});
+
+test('match labels name every place in a double knockout', () => {
+  const tr = (k, v) => k + (v ? JSON.stringify(v) : '');
+  const t = L.createTournament({ name: 'd', format: 'double', names: names(8), settings: {} });
+  const labels = L.bracketMatches(t).map(m => L.matchLabel(t, m, tr));
+  assert.ok(labels.includes('wFinal') && labels.includes('lFinal') && labels.includes('grandFinal') && labels.includes('grandReset'));
+  assert.ok(labels.every(Boolean));
+});

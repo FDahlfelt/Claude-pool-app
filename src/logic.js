@@ -185,6 +185,8 @@ export function syncBracket(br) {
     if (m.a !== a || m.b !== b) {
       Object.assign(m, { a, b, sa: null, sb: null, frames: [], startedAt: null, endedAt: null, table: null });
       delete m.balls;
+      delete m.wo;          // a walkover belonged to the old pairing
+      delete m.firstBreak;
     }
   };
   for (let r = 1; r < br.rounds.length; r++) {
@@ -350,7 +352,7 @@ export function plan(format, n, s) {
   } else if (format === 'double') {
     // Everyone but the winner loses twice, the winner at most once (a possible extra final aside).
     playoff = Math.max(2 * n - 2, 0);
-    per = [2, 2 * Math.ceil(Math.log2(Math.max(n, 2)))];
+    per = [2, 2 * Math.ceil(Math.log2(Math.max(n, 2))) + 2];
   } else {
     const P = playoffCount(format, n, s);
     playoff = P >= 2 ? P - 1 + (s.bronze && P >= 4 ? 1 : 0) : 0;
@@ -498,7 +500,7 @@ export function progress(t) {
   const done = real.filter(isDone).length;
   if (t.format === 'double') {
     // Slots that will turn out empty aren't known yet, so count from the plan.
-    const reset = t.bracket.grand[1];
+    const reset = t.bracket?.grand?.[1];
     const extra = reset && !isBye(reset) && reset.a ? 1 : 0;
     return { done, total: Math.max(plan('double', t.players.length, t.settings).total + extra, done) };
   }
@@ -518,18 +520,20 @@ export function matchInfo(t, id) {
       const m = R[r].find(x => x.id === id);
       if (m) {
         const dbl = !!t.bracket.grand; // in a double knockout the winners' final is not the last match
-        return { m, race: r === R.length - 1 && !dbl ? t.settings.finalRace : t.settings.koRace, stage: 'bracket', round: r, fromEnd: R.length - 1 - r, side: dbl ? 'W' : undefined };
+        return { m, race: r === R.length - 1 && !dbl ? t.settings.finalRace : t.settings.koRace, stage: 'bracket', round: r, order: 2 * r, fromEnd: R.length - 1 - r, side: dbl ? 'W' : undefined };
       }
     }
-    if (t.bracket.bronze?.id === id) return { m: t.bracket.bronze, race: t.settings.koRace, stage: 'bracket', bronze: true };
+    if (t.bracket.bronze?.id === id) return { m: t.bracket.bronze, race: t.settings.koRace, stage: 'bracket', bronze: true, round: R.length - 1, order: 2 * (R.length - 1) - 0.5 };
     if (t.bracket.lower) {
       const Lo = t.bracket.lower;
       for (let r = 0; r < Lo.length; r++) {
         const m = Lo[r].find(x => x.id === id);
-        if (m) return { m, race: t.settings.koRace, stage: 'bracket', side: 'L', round: R.length + r, lround: r, fromEnd: Lo.length - 1 - r };
+        // Losers' round 0 follows winners' round 0; after that each pair of losers' rounds
+        // follows the winners' round whose losers drop into it.
+        if (m) return { m, race: t.settings.koRace, stage: 'bracket', side: 'L', round: R.length + r, lround: r, order: r === 0 ? 1 : 2 * Math.ceil(r / 2) + (r % 2 ? 1 : 1.5), fromEnd: Lo.length - 1 - r };
       }
       const g = t.bracket.grand.findIndex(x => x?.id === id);
-      if (g >= 0) return { m: t.bracket.grand[g], race: t.settings.finalRace, stage: 'bracket', side: 'G', grand: g, round: R.length + Lo.length + g };
+      if (g >= 0) return { m: t.bracket.grand[g], race: t.settings.finalRace, stage: 'bracket', side: 'G', grand: g, round: R.length + Lo.length + g, order: 2 * R.length + g };
     }
   }
   return null;
@@ -661,7 +665,7 @@ export function upNext(t) {
   const lastPlayed = {};
   for (const m of all) if (m.endedAt) for (const p of [m.a, m.b]) lastPlayed[p] = Math.max(lastPlayed[p] || 0, m.endedAt);
   const order = new Map(all.map((m, i) => [m.id, i]));
-  const roundOf = m => matchInfo(t, m.id)?.round ?? 0;
+  const roundOf = m => { const i = matchInfo(t, m.id); return i?.order ?? i?.round ?? 0; };
   return all
     .filter(m => isReady(m) && !isDone(m) && !isLive(m) && !busy.has(m.a) && !busy.has(m.b))
     .sort((x, y) =>
@@ -797,4 +801,18 @@ export function headToHead(tournaments, nameA, nameB) {
   }
   out.meetings.sort((x, y) => y.at - x.at);
   return out;
+}
+
+/** The name of a match's place in the tournament, in the language of `tr`. */
+export function matchLabel(t, m, tr, { short = false } = {}) {
+  const info = matchInfo(t, m.id);
+  if (!info) return '';
+  if (info.stage === 'stage') return tr('roundN', { n: info.round + 1 }) + (m.group ? ' · ' + tr('groupN', { g: m.group }) : '');
+  if (info.side === 'G') return info.grand ? tr('grandReset') : tr('grandFinal');
+  if (info.side === 'L') return info.fromEnd === 0 ? tr('lFinal') : tr('lRound', { n: info.lround + 1 });
+  if (info.bronze) return tr('bronze');
+  const one = short ? [tr('finalOne'), tr('semiOne'), tr('quarterOne'), tr('last16')] : [tr('final'), tr('semis'), tr('quarters'), tr('last16')];
+  const name = one[info.fromEnd] ?? tr('roundN', { n: info.round + 1 });
+  if (info.side === 'W') return info.fromEnd === 0 ? tr('wFinal') : `${tr('winnersSide')} · ${name}`;
+  return name;
 }

@@ -1,5 +1,5 @@
 // Offline support: cache the app shell, serve it cache-first, refresh in the background.
-const CACHE = 'pool-v2.3.0';
+const CACHE = 'pool-v2.4.0';
 const SHELL = [
   './', 'index.html', 'styles.css', 'manifest.webmanifest',
   'src/app.js', 'src/logic.js', 'src/store.js', 'src/i18n.js', 'src/share.js', 'src/live.js', 'src/card.js',

@@ -67,3 +67,13 @@ test('a double knockout half-way through survives the trip and keeps going', () 
   L.setResult(back, next, 4, 0);
   assert.ok(L.isDone(next));
 });
+
+test('documents from an older version (without the newer empty fields) cause no write', () => {
+  const t = L.createTournament({ name: 'x', format: 'league', names: names(4), settings: {} });
+  const now = toShared(t);
+  const old = JSON.parse(JSON.stringify(now));
+  for (const m of Object.values(old.matches)) { delete m.wo; delete m.src; }
+  delete old.meta.bracket;
+  old.meta.bracket = null;
+  assert.equal(diff(old, now), null);
+});
