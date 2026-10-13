@@ -9,7 +9,7 @@
 //            overwrite each other.
 
 const COL = 'live';
-const MATCH_FIELDS = ['a', 'b', 'sa', 'sb', 'frames', 'startedAt', 'endedAt', 'table', 'firstBreak', 'balls', 'group', 'wo'];
+const MATCH_FIELDS = ['a', 'b', 'sa', 'sb', 'frames', 'startedAt', 'endedAt', 'table', 'firstBreak', 'balls', 'group', 'wo', 'src'];
 
 // ---------- Pure conversion (tested in Node) ----------
 
@@ -31,14 +31,23 @@ export function toShared(t) {
   const matches = {};
   const add = m => { if (m) matches[m.id] = packMatch(m); };
   t.rounds.forEach(r => r.matches.forEach(add));
-  if (t.bracket) { t.bracket.rounds.forEach(r => r.forEach(add)); add(t.bracket.bronze); }
+  if (t.bracket) {
+    t.bracket.rounds.forEach(r => r.forEach(add));
+    add(t.bracket.bronze);
+    (t.bracket.lower || []).forEach(r => r.forEach(add));
+    (t.bracket.grand || []).forEach(add);
+  }
   return {
     meta: {
       id: t.id, v: t.v ?? 2, name: t.name, format: t.format, game: t.game,
       players: t.players, settings: t.settings, groups: t.groups ?? null, createdAt: t.createdAt,
       rounds: t.rounds.map(r => ({ ids: r.matches.map(m => m.id), byes: r.byes })),
       bracket: t.bracket
-        ? { rounds: t.bracket.rounds.map(r => r.map(m => m.id)), bronze: t.bracket.bronze?.id ?? null, labels: t.bracket.labels || {} }
+        ? {
+          rounds: t.bracket.rounds.map(r => r.map(m => m.id)), bronze: t.bracket.bronze?.id ?? null, labels: t.bracket.labels || {},
+          lower: t.bracket.lower ? t.bracket.lower.map(r => r.map(m => m.id)) : null,
+          grand: t.bracket.grand ? t.bracket.grand.map(m => m?.id ?? null) : null,
+        }
         : null,
     },
     matches,
@@ -56,6 +65,7 @@ export function fromShared(doc) {
     if (out.group === null) delete out.group;
     if (out.balls === null) delete out.balls;
     if (out.wo === null) delete out.wo;
+    if (out.src === null) delete out.src;
     return out;
   };
   return {
@@ -63,7 +73,10 @@ export function fromShared(doc) {
     players: meta.players, settings: meta.settings, groups: meta.groups ?? null, createdAt: meta.createdAt,
     rounds: meta.rounds.map(r => ({ matches: r.ids.map(unpack), byes: r.byes || [] })),
     bracket: meta.bracket
-      ? { rounds: meta.bracket.rounds.map(r => r.map(unpack)), bronze: meta.bracket.bronze ? unpack(meta.bracket.bronze) : null, labels: meta.bracket.labels || {} }
+      ? {
+        rounds: meta.bracket.rounds.map(r => r.map(unpack)), bronze: meta.bracket.bronze ? unpack(meta.bracket.bronze) : null, labels: meta.bracket.labels || {},
+        ...(meta.bracket.lower ? { lower: meta.bracket.lower.map(r => r.map(unpack)), grand: meta.bracket.grand.map(id => (id ? unpack(id) : null)) } : {}),
+      }
       : null,
     updatedAt: doc.updatedAt ?? Date.now(),
     live: true,

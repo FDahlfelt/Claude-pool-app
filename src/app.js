@@ -49,7 +49,7 @@ const ballEl = (n, size = 22, cls = '') =>
     : `<span class="ball b${n} ${cls}" style="font-size:${size}px" aria-hidden="true"><i>${n === 0 ? '' : n}</i></span>`;
 const idxBall = i => PLAYER_BALLS[i % PLAYER_BALLS.length];
 const ballNo = (t, id) => { const i = t.players.findIndex(p => p.id === id); return i < 0 ? null : idxBall(i); };
-const pball = (t, id, size = 22, cls = '') => ballEl(id && id !== L.BYE ? ballNo(t, id) : null, size, cls);
+const pball = (t, id, size = 22, cls = '') => ballEl(id && id !== L.BYE && id !== L.NONE ? ballNo(t, id) : null, size, cls);
 const gameBall = (game, size = 30, cls = '') => ballEl({ '8ball': 8, '9ball': 9, '10ball': 10 }[game] ?? 1, size, cls);
 const cue = size => `<span class="ball b0 clean" style="font-size:${size}px" aria-hidden="true"><i></i></span>`;
 
@@ -208,7 +208,7 @@ function tabbar(active, sub = false) {
 
 const fmtName = f => tr('fmt_' + f);
 const gone = (t, id) => !!t.players.find(p => p.id === id)?.withdrawn;
-const pname = (t, id) => (id === L.BYE ? tr('bye') : id ? esc(L.playerName(t, id)) : tr('tbd'));
+const pname = (t, id) => (id === L.BYE ? tr('bye') : id === L.NONE ? '—' : id ? esc(L.playerName(t, id)) : tr('tbd'));
 
 function roundName(fromEnd, r) {
   return [tr('final'), tr('semis'), tr('quarters'), tr('last16')][fromEnd] ?? tr('roundN', { n: r + 1 });
@@ -217,6 +217,9 @@ function ctxLabel(t, m) {
   const info = L.matchInfo(t, m.id);
   if (!info) return '';
   if (info.stage === 'stage') return tr('roundN', { n: info.round + 1 }) + (m.group ? ' · ' + tr('groupN', { g: m.group }) : '');
+  if (info.side === 'W') return info.fromEnd === 0 ? tr('wFinal') : `${tr('winnersSide')} · ${roundName(info.fromEnd, info.round)}`;
+  if (info.side === 'L') return info.fromEnd === 0 ? tr('lFinal') : tr('lRound', { n: info.lround + 1 });
+  if (info.side === 'G') return info.grand ? tr('grandReset') : tr('grandFinal');
   return info.bronze ? tr('bronze') : roundName(info.fromEnd, info.round);
 }
 function relTime(ts) {
@@ -404,13 +407,14 @@ function formatOptions() {
   } else {
     rows = `<div class="list-row"><div class="stack grow" style="gap:8px"><span class="t-body">${tr('seeding')}</span>${draftSeg('seeding', [['random', tr('seedRandom')], ['list', tr('seedList')]])}
       <span class="t-xs ink-3">${tr(d.seeding === 'list' ? 'seedListHint' : 'seedRandomHint')}</span></div></div>`;
+    if (d.format === 'double') rows += optRow(tr('gfReset'), tr('gfResetHint'), draftSwitch('gfReset', tr('gfReset')));
   }
   return `<div class="card">${rows}</div>`;
 }
 
 function rulesFields() {
   const d = draft, n = filledNames().length;
-  const ko = d.format === 'knockout';
+  const ko = L.isBracketFormat(d.format);
   const P = ko ? n : L.playoffCount(d.format, n, draftSettings());
   const bestOf = f => tr('bestOf', { n: 2 * effective(f) - 1 });
   let rows = '';
@@ -420,7 +424,7 @@ function rulesFields() {
   if (!ko) rows += optRow(tr('pointsPerWin'), '', draftStepper('pointsPerWin', tr('pointsPerWin')));
   rows += optRow(tr('tables'), '', draftStepper('tables', tr('tables')));
   rows += `<div class="list-row"><div class="stack grow" style="gap:8px"><span class="t-body">${tr('breakRule')}</span>${draftSeg('breakRule', [['alternate', tr('breakAlternate')], ['winner', tr('breakWinner')]])}</div></div>`;
-  if (P >= 4) rows += optRow(tr('bronzeMatch'), '', draftSwitch('bronze', tr('bronzeMatch')));
+  if (P >= 4 && d.format !== 'double') rows += optRow(tr('bronzeMatch'), '', draftSwitch('bronze', tr('bronzeMatch')));
   rows += optRow(tr('ballCount'), tr('ballCountHint', { n: L.maxBalls(d.game) }), draftSwitch('ballCount', tr('ballCount')));
   return `<div class="card">${rows}</div>`;
 }
@@ -483,13 +487,13 @@ function updateSummary(structure = false) {
   let html;
   if (err || dupes) html = `<span class="t-over">${tr('scheduleLbl')}</span><p class="t-body warn" style="color:#FFB4A6">${err ? tr('err_' + err) : tr('errDupes')}</p>`;
   else {
-    const per = draft.format === 'knockout' ? p.per[1] : p.per[0] === p.per[1] ? p.per[0] : `${p.per[0]}–${p.per[1]}`;
+    const per = L.isBracketFormat(draft.format) ? p.per[1] : p.per[0] === p.per[1] ? p.per[0] : `${p.per[0]}–${p.per[1]}`;
     const parts = [];
     if (p.stage) parts.push(tr('sumStage', { n: p.stage }));
-    if (p.playoff) parts.push(tr(draft.format === 'knockout' ? 'sumKo' : 'sumPlayoff', { n: p.playoff }));
+    if (p.playoff) parts.push(tr(draft.format === 'double' ? (draft.gfReset ? 'sumDouble' : 'sumKo') : draft.format === 'knockout' ? 'sumKo' : 'sumPlayoff', { n: p.playoff }));
     html = `<span class="t-over">${tr('scheduleLbl')}</span>
       <div class="row" style="align-items:baseline;gap:8px"><span class="num big">${p.total}</span><span class="t-h3">${tr('matchesWord')}</span></div>
-      <p class="t-sm ink-2">${tr('nPlayers', { n })} · ${parts.join(' + ')}. ${draft.format === 'knockout' ? tr('sumPerKo', { per }) : tr('sumPer', { per })}${draft.tables > 1 ? ' ' + tr('sumTables', { n: draft.tables }) : ''}</p>`;
+      <p class="t-sm ink-2">${tr('nPlayers', { n })} · ${parts.join(' + ')}. ${draft.format === 'double' ? tr('sumPerDouble', { per }) : draft.format === 'knockout' ? tr('sumPerKo', { per }) : tr('sumPer', { per })}${draft.tables > 1 ? ' ' + tr('sumTables', { n: draft.tables }) : ''}</p>`;
   }
   $('#summary').innerHTML = html;
   $('#createBtn').disabled = !!err || dupes;
@@ -522,7 +526,7 @@ function createFromDraft() {
 // ---------- Tournament ----------
 function tabsFor(t) {
   const tabs = [['overview', tr('tabOverview')]];
-  if (t.format === 'knockout') tabs.push(['bracket', tr('tabBracket')]);
+  if (L.isBracketFormat(t.format)) tabs.push(['bracket', tr('tabBracket')]);
   else {
     tabs.push(['matches', tr('tabMatches')], ['table', tr('tabTable')]);
     if (L.hasPlayoff(t)) tabs.push(['bracket', tr('tabPlayoff')]);
@@ -552,7 +556,7 @@ function ticks(t) {
   const p = L.plan(t.format, t.players.length, t.settings);
   let ko;
   if (t.bracket) ko = L.bracketMatches(t).filter(m => !L.isBye(m)).map(m => (L.isDone(m) ? 'd' : L.isLive(m) ? 'l' : 'p'));
-  else ko = Array(t.format === 'knockout' ? 0 : p.playoff).fill('p');
+  else ko = Array(L.isBracketFormat(t.format) ? 0 : p.playoff).fill('p');
   if (t.format === 'swiss') for (let i = st.length; i < p.stage; i++) st.push('');
   const cell = c => `<i class="${c}"></i>`;
   if (st.length + ko.length > 64) return '';
@@ -581,8 +585,12 @@ function heroCard(t) {
       <button class="btn btn-g" data-act="startPlayoff">${ICON.trophy}<span>${tr('startPlayoff')}</span></button>${foot}</section>`;
   }
   let title, over = fmtName(t.format);
-  if (ph === 'playoff') {
-    over = t.format === 'knockout' ? fmtName('knockout') : tr('playoff');
+  if (ph === 'playoff' && t.format === 'double') {
+    over = fmtName('double');
+    const at = L.allMatches(t).find(L.isLive) || L.upNext(t)[0];
+    title = at ? ctxLabel(t, at) : tr('grandFinal');
+  } else if (ph === 'playoff') {
+    over = L.isBracketFormat(t.format) ? fmtName(t.format) : tr('playoff');
     const R = t.bracket.rounds;
     const r = R.findIndex(round => !round.every(L.isDone));
     title = r < 0 ? (t.bracket.bronze ? tr('bronze') : tr('final')) : roundName(R.length - 1 - r, r);
@@ -639,7 +647,7 @@ function tabOverview(t) {
     const next = L.upNext(t).slice(0, Math.max(3, t.settings.tables * 2));
     if (next.length) html += `<section class="stack"><div class="sec"><span class="t-over">${tr('upNext')}</span></div><div class="card">${next.map(m => matchRow(t, m, { start: true })).join('')}</div></section>`;
   }
-  if (t.format !== 'knockout') {
+  if (!L.isBracketFormat(t.format)) {
     const groups = t.format === 'groups' ? t.groups : [{ name: null, players: null }];
     side += `<section class="stack"><div class="sec"><span class="t-over">${tr('tabTable')}</span><button class="link" data-act="tab" data-tab="table">${tr('seeAll')}${ICON.chev}</button></div>`;
     side += groups.map(g => {
@@ -777,6 +785,7 @@ function tabBracket(t) {
       <button class="btn btn-g" data-act="startPlayoff">${ICON.trophy}<span>${tr('startPlayoff')}</span></button>
     </section>`;
   }
+  if (t.bracket.lower) return doubleBracket(t);
   const R = t.bracket.rounds;
   let html = `<div class="bracket-scroll"><div class="brk" style="--cols:${R.length}">`;
   R.forEach((ms, r) => {
@@ -790,7 +799,30 @@ function tabBracket(t) {
   html += '</div></div>';
   const pod = L.podium(t);
   if (pod) html += championCard(t, pod);
-  if (t.format !== 'knockout') html += `<div class="row center"><button class="btn btn-ghost btn-sm" data-act="resetPlayoff">${tr('resetPlayoff')}</button></div>`;
+  if (!L.isBracketFormat(t.format)) html += `<div class="row center"><button class="btn btn-ghost btn-sm" data-act="resetPlayoff">${tr('resetPlayoff')}</button></div>`;
+  return html;
+}
+
+/** Double knockout: the winners' side, the losers' side and the grand final. */
+function doubleBracket(t) {
+  const br = t.bracket, R = br.rounds, Lo = br.lower;
+  const ko = tr('raceShort', { n: t.settings.koRace });
+  const visible = m => m.a !== L.NONE; // empty losers' slots are left out
+  const cols = (rounds, name) => `<div class="bracket-scroll"><div class="brk" style="--cols:${rounds.length}">${rounds.map((ms, r) =>
+    `<div class="brk-col"><div class="bk-h"><span>${name(r)}</span><span class="tnum">${ko}</span></div>
+      <div class="brk-body">${ms.filter(visible).map(m => bmatch(t, m, false)).join('')}</div></div>`).join('')}</div></div>`;
+  const [gf, reset] = br.grand;
+  const resetBox = !reset ? '' : L.isBye(reset) ? '' : reset.a
+    ? `<div class="bronze-box"><div class="bk-h"><span>${tr('grandReset')}</span><span>${tr('raceShort', { n: t.settings.finalRace })}</span></div>${bmatch(t, reset, true)}</div>`
+    : `<p class="t-xs ink-3">${tr('resetMaybe')}</p>`;
+  let html = `<section class="stack"><div class="sec"><span class="t-over">${tr('winnersSide')}</span></div>
+      ${cols(R, r => (r === R.length - 1 ? tr('wFinal') : roundName(R.length - 1 - r, r)))}</section>
+    <section class="stack"><div class="sec"><span class="t-over">${tr('losersSide')}</span><span class="t-xs ink-3">${tr('losersHint')}</span></div>
+      ${cols(Lo, r => (r === Lo.length - 1 ? tr('lFinal') : tr('lRound', { n: r + 1 })))}</section>
+    <section class="stack"><div class="sec"><span class="t-over">🏆 ${tr('grandFinal')}</span><span class="tnum t-xs ink-3">${tr('raceShort', { n: t.settings.finalRace })}</span></div>
+      <div class="grand">${bmatch(t, gf, true)}${resetBox}</div></section>`;
+  const pod = L.podium(t);
+  if (pod) html += championCard(t, pod);
   return html;
 }
 
@@ -879,7 +911,7 @@ function liveSection(t) {
 // ---------- Match screen: the table ----------
 function viewMatch(t, mid) {
   const info = L.matchInfo(t, mid);
-  const backTo = `#/t/${t.id}/${info?.stage === 'bracket' || t.format === 'knockout' ? 'bracket' : 'overview'}`;
+  const backTo = `#/t/${t.id}/${info?.stage === 'bracket' || L.isBracketFormat(t.format) ? 'bracket' : 'overview'}`;
   if (!info || !L.isReady(info.m)) {
     return header({ back: backTo, title: t.name }) + `<main class="page tight"><p class="empty">${tr('matchNotReady')}</p></main>`;
   }

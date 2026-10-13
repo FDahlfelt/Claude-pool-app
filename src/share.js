@@ -55,10 +55,9 @@ export function summaryText(t, tr) {
     rows.forEach((r, i) => lines.push(`${i + 1}. ${r.name} – ${r.pts} ${tr('ptsShort')} (${r.w}-${r.l}, ${r.diff > 0 ? '+' : ''}${r.diff})`));
   };
   if (t.format === 'groups') t.groups.forEach(g => table(L.standingsFor(t, g.players), tr('groupN', { g: g.name })));
-  else if (t.format !== 'knockout') table(L.standingsFor(t), pod ? tr('stageTable') : null);
+  else if (!L.isBracketFormat(t.format)) table(L.standingsFor(t), pod ? tr('stageTable') : null);
   if (t.bracket) {
-    const R = t.bracket.rounds;
-    const done = R.flat().filter(m => L.isDone(m) && !L.isBye(m));
+    const done = L.bracketMatches(t).filter(m => L.isDone(m) && !L.isBye(m));
     if (done.length) {
       lines.push('', tr('playoff'));
       for (const m of done) lines.push(`${name(m.a)} ${m.sa}–${m.sb} ${name(m.b)}`);

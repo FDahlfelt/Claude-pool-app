@@ -61,18 +61,25 @@ function plan(t, tr, ballNo) {
     rows.slice(0, 16).forEach((r, i) => items.push({ kind: 'row', r, pos: i + 1, cut: i < cut, h: 74 }));
   };
   if (t.format === 'groups') t.groups.forEach(g => table(L.standingsFor(t, g.players), tr('groupN', { g: g.name }), t.settings.advance));
-  else if (t.format !== 'knockout') table(L.standingsFor(t), pod ? tr('stageTable') : null, L.hasPlayoff(t) ? L.playoffCount(t.format, t.players.length, t.settings) : 0);
+  else if (!L.isBracketFormat(t.format)) table(L.standingsFor(t), pod ? tr('stageTable') : null, L.hasPlayoff(t) ? L.playoffCount(t.format, t.players.length, t.settings) : 0);
   if (t.bracket) {
     const R = t.bracket.rounds;
-    // Latest round first, the bronze match right after the final.
-    const lines = [];
-    for (let r = R.length - 1; r >= 0; r--) {
-      R[r].forEach(m => { if (L.isDone(m) && !L.isBye(m)) lines.push({ m, label: [tr('finalOne'), tr('semiOne'), tr('quarterOne')][R.length - 1 - r] || tr('roundN', { n: r + 1 }) }); });
-      if (r === R.length - 1 && t.bracket.bronze && L.isDone(t.bracket.bronze)) lines.push({ m: t.bracket.bronze, label: tr('bronze') });
-    }
+    const label = m => {
+      const i = L.matchInfo(t, m.id);
+      if (i.side === 'G') return i.grand ? tr('grandReset') : tr('grandFinal');
+      if (i.side === 'L') return i.fromEnd === 0 ? tr('lFinal') : tr('lRound', { n: i.lround + 1 });
+      if (i.side === 'W' && i.fromEnd === 0) return tr('wFinal');
+      if (i.bronze) return tr('bronze');
+      return [tr('finalOne'), tr('semiOne'), tr('quarterOne')][i.fromEnd] || tr('roundN', { n: i.round + 1 });
+    };
+    // Latest round first; the bronze match sits right after the final.
+    const order = m => { const i = L.matchInfo(t, m.id); return i.bronze ? R.length - 1.5 : i.round; };
+    const lines = L.bracketMatches(t).filter(m => L.isDone(m) && !L.isBye(m))
+      .sort((x, y) => order(y) - order(x))
+      .map(m => ({ m, label: label(m) }));
     if (lines.length) {
       items.push({ kind: 'label', text: tr('playoff'), h: 70 });
-      lines.slice(0, 12).forEach(l => items.push({ kind: 'ko', ...l, h: 66 }));
+      lines.slice(0, 14).forEach(l => items.push({ kind: 'ko', ...l, h: 66 }));
     }
   }
   return { items, ballNo };

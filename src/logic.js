@@ -2,7 +2,11 @@
 // so it can be tested without a browser.
 
 export const BYE = '__bye';
-export const FORMATS = ['league', 'groups', 'swiss', 'knockout'];
+/** An empty slot in the losers' bracket: the winners' match it waits on had a bye, so nobody drops. */
+export const NONE = '__none';
+export const FORMATS = ['league', 'groups', 'swiss', 'knockout', 'double'];
+/** Formats that are a bracket from the start. */
+export const isBracketFormat = f => f === 'knockout' || f === 'double';
 export const GAMES = ['8ball', '9ball', '10ball', 'other'];
 export const MAX_PLAYERS = 64;
 
@@ -20,6 +24,7 @@ export const DEFAULT_SETTINGS = {
   tables: 1,
   breakRule: 'alternate', // or 'winner'
   seeding: 'random',      // knockout: 'random' or 'list'
+  gfReset: true,          // double knockout: a second grand final if the losers' side wins the first
   ballCount: true,        // record the loser's balls left after each frame, used as a tiebreaker
 };
 
@@ -189,6 +194,64 @@ export function syncBracket(br) {
     const semis = br.rounds[br.rounds.length - 2];
     fill(br.bronze, loserOf(semis[0]), loserOf(semis[1]));
   }
+  if (br.lower) syncDouble(br, fill);
+}
+
+// ---------- Double knockout ----------
+
+/**
+ * Who a losers'-bracket slot gets: a player, null (not decided yet) or NONE (nobody will come,
+ * because the winners' match it waits on was a bye or an empty slot).
+ */
+function resolveSource(br, [side, r, i, take]) {
+  const m = side === 'W' ? br.rounds[r][i] : br.lower[r][i];
+  if (!isDone(m)) return null;
+  if (take === 'L') return isBye(m) ? NONE : loserOf(m);
+  return winnerOf(m);
+}
+
+function syncDouble(br, fill) {
+  for (const round of br.lower) {
+    for (const m of round) {
+      const a = resolveSource(br, m.src[0]), b = resolveSource(br, m.src[1]);
+      if (a === null || b === null) fill(m, a === NONE ? null : a, b === NONE ? null : b);
+      else if (a === NONE && b === NONE) fill(m, NONE, BYE);
+      else if (a === NONE) fill(m, b, BYE);   // the player still standing goes straight on
+      else if (b === NONE) fill(m, a, BYE);
+      else fill(m, a, b);
+    }
+  }
+  const [gf, reset] = br.grand;
+  fill(gf, resolveSource(br, gf.src[0]), resolveSource(br, gf.src[1]));
+  if (!reset) return;
+  // The losers' champion has one loss, the winners' champion none: if the losers' side wins
+  // the grand final, both have one loss and they play once more.
+  if (!isDone(gf)) fill(reset, null, null);
+  else if (winnerOf(gf) === gf.b) fill(reset, gf.a, gf.b);
+  else fill(reset, NONE, BYE);
+}
+
+/** Double elimination: a normal bracket (winners' side) plus a losers' side and a grand final. */
+export function makeDouble(seeds, { reset = true, labels = [] } = {}) {
+  const br = makeBracket(seeds, { bronze: false, labels });
+  const k = br.rounds.length, size = 2 ** k;
+  const lower = [];
+  // Round 1: losers of the winners' first round play each other.
+  lower.push(Array.from({ length: size / 4 }, (_, i) => mkMatch(null, null, { src: [['W', 0, 2 * i, 'L'], ['W', 0, 2 * i + 1, 'L']] })));
+  for (let j = 1; j < k; j++) {
+    const n = br.rounds[j].length, prev = lower.length - 1;
+    // Drop round: survivors meet the losers of winners' round j, in crossed order on every
+    // other round so people who just met don't meet again.
+    lower.push(Array.from({ length: n }, (_, i) => mkMatch(null, null, { src: [['B', prev, i, 'W'], ['W', j, j % 2 ? n - 1 - i : i, 'L']] })));
+    if (j < k - 1) {
+      const d = lower.length - 1;
+      lower.push(Array.from({ length: n / 2 }, (_, i) => mkMatch(null, null, { src: [['B', d, 2 * i, 'W'], ['B', d, 2 * i + 1, 'W']] })));
+    }
+  }
+  br.lower = lower;
+  br.grand = [mkMatch(null, null, { src: [['W', k - 1, 0, 'W'], ['B', lower.length - 1, 0, 'W']] }), reset ? mkMatch(null, null) : null];
+  syncBracket(br);
+  return br;
 }
 
 /** Swap opponents in the first round so players from the same group don't meet straight away. */
@@ -260,7 +323,7 @@ export function computeStandings({ players, matches, byes = [], pointsPerWin = 1
 // ---------- Planning ----------
 
 export function playoffCount(format, n, s) {
-  if (format === 'knockout') return 0;
+  if (isBracketFormat(format)) return 0;
   if (format === 'groups') return Math.min(n, s.groupCount * s.advance);
   return Math.min(n, s.playoffSize);
 }
@@ -284,6 +347,10 @@ export function plan(format, n, s) {
   if (format === 'knockout') {
     playoff = Math.max(n - 1, 0) + (s.bronze && n >= 4 ? 1 : 0);
     per = [1, Math.ceil(Math.log2(Math.max(n, 2)))];
+  } else if (format === 'double') {
+    // Everyone but the winner loses twice, the winner at most once (a possible extra final aside).
+    playoff = Math.max(2 * n - 2, 0);
+    per = [2, 2 * Math.ceil(Math.log2(Math.max(n, 2)))];
   } else {
     const P = playoffCount(format, n, s);
     playoff = P >= 2 ? P - 1 + (s.bronze && P >= 4 ? 1 : 0) : 0;
@@ -321,15 +388,18 @@ export function createTournament({ name, format, game = '8ball', names, settings
   if (format === 'league') t.rounds = roundRobin(ids, { legs: s.legs });
   else if (format === 'groups') Object.assign(t, groupStage(ids, s.groupCount, s.legs));
   else if (format === 'swiss') t.rounds = [swissRound(shuffle(ids))];
+  else if (format === 'double') t.bracket = makeDouble(s.seeding === 'list' ? ids : shuffle(ids), { reset: s.gfReset });
   else t.bracket = makeBracket(s.seeding === 'list' ? ids : shuffle(ids), { bronze: s.bronze });
   return t;
 }
 
 export const stageMatches = t => t.rounds.flatMap(r => r.matches);
-export const bracketMatches = t => (t.bracket ? [...t.bracket.rounds.flat(), t.bracket.bronze].filter(Boolean) : []);
+export const bracketMatches = t => (t.bracket
+  ? [...t.bracket.rounds.flat(), t.bracket.bronze, ...(t.bracket.lower || []).flat(), ...(t.bracket.grand || [])].filter(Boolean)
+  : []);
 export const allMatches = t => [...stageMatches(t), ...bracketMatches(t)];
 export const playerName = (t, id) => t.players.find(p => p.id === id)?.name ?? '?';
-export const hasPlayoff = t => t.format !== 'knockout' && playoffCount(t.format, t.players.length, t.settings) >= 2;
+export const hasPlayoff = t => !isBracketFormat(t.format) && playoffCount(t.format, t.players.length, t.settings) >= 2;
 
 export function standingsFor(t, ids) {
   const players = ids ? t.players.filter(p => ids.includes(p.id)) : t.players;
@@ -346,7 +416,7 @@ export function standingsFor(t, ids) {
 }
 
 export function stageComplete(t) {
-  if (t.format === 'knockout') return true;
+  if (isBracketFormat(t.format)) return true;
   const done = stageMatches(t).every(isDone);
   return t.format === 'swiss' ? done && t.rounds.length >= t.settings.swissRounds : done;
 }
@@ -391,12 +461,23 @@ export function startPlayoff(t) {
 }
 
 export function podium(t) {
+  if (t.bracket?.grand) {
+    const [gf, reset] = t.bracket.grand;
+    if (!isDone(gf) || !winnerOf(gf)) return null;
+    let final = gf;
+    if (reset && winnerOf(gf) === gf.b) {
+      if (!isDone(reset) || isBye(reset)) return null;
+      final = reset;
+    }
+    const lowerFinal = t.bracket.lower[t.bracket.lower.length - 1][0];
+    return { first: winnerOf(final), second: loserOf(final), third: loserOf(lowerFinal) };
+  }
   if (t.bracket) {
     const final = t.bracket.rounds[t.bracket.rounds.length - 1][0];
     if (!isDone(final) || !winnerOf(final)) return null;
     return { first: winnerOf(final), second: loserOf(final), third: t.bracket.bronze ? winnerOf(t.bracket.bronze) : null };
   }
-  if (t.format !== 'knockout' && !hasPlayoff(t) && stageComplete(t)) {
+  if (!isBracketFormat(t.format) && !hasPlayoff(t) && stageComplete(t)) {
     const st = standingsFor(t);
     return { first: st[0]?.id ?? null, second: st[1]?.id ?? null, third: st[2]?.id ?? null };
   }
@@ -415,6 +496,12 @@ export function phase(t) {
 export function progress(t) {
   const real = allMatches(t).filter(m => !isBye(m));
   const done = real.filter(isDone).length;
+  if (t.format === 'double') {
+    // Slots that will turn out empty aren't known yet, so count from the plan.
+    const reset = t.bracket.grand[1];
+    const extra = reset && !isBye(reset) && reset.a ? 1 : 0;
+    return { done, total: Math.max(plan('double', t.players.length, t.settings).total + extra, done) };
+  }
   const total = Math.max(plan(t.format, t.players.length, t.settings).total, real.length);
   return { done, total };
 }
@@ -429,9 +516,21 @@ export function matchInfo(t, id) {
     const R = t.bracket.rounds;
     for (let r = 0; r < R.length; r++) {
       const m = R[r].find(x => x.id === id);
-      if (m) return { m, race: r === R.length - 1 ? t.settings.finalRace : t.settings.koRace, stage: 'bracket', round: r, fromEnd: R.length - 1 - r };
+      if (m) {
+        const dbl = !!t.bracket.grand; // in a double knockout the winners' final is not the last match
+        return { m, race: r === R.length - 1 && !dbl ? t.settings.finalRace : t.settings.koRace, stage: 'bracket', round: r, fromEnd: R.length - 1 - r, side: dbl ? 'W' : undefined };
+      }
     }
     if (t.bracket.bronze?.id === id) return { m: t.bracket.bronze, race: t.settings.koRace, stage: 'bracket', bronze: true };
+    if (t.bracket.lower) {
+      const Lo = t.bracket.lower;
+      for (let r = 0; r < Lo.length; r++) {
+        const m = Lo[r].find(x => x.id === id);
+        if (m) return { m, race: t.settings.koRace, stage: 'bracket', side: 'L', round: R.length + r, lround: r, fromEnd: Lo.length - 1 - r };
+      }
+      const g = t.bracket.grand.findIndex(x => x?.id === id);
+      if (g >= 0) return { m: t.bracket.grand[g], race: t.settings.finalRace, stage: 'bracket', side: 'G', grand: g, round: R.length + Lo.length + g };
+    }
   }
   return null;
 }

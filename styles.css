@@ -852,3 +852,5 @@ button.bk{ display:block; width:100%; text-align:left; }
 .h2h-side.lead .num{ color:var(--gold); }
 .h2h-vs{ font-family:var(--f-display); font-size:30px; color:var(--ink-3); }
 .field input:focus-visible, .field select:focus-visible, .field textarea:focus-visible{ outline:none; }
+.grand{ display:flex; flex-direction:column; gap:10px; max-width:360px; }
+.grand .bronze-box{ margin-top:6px; }

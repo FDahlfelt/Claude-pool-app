@@ -280,3 +280,48 @@ test('a real score replaces a walkover', () => {
   assert.equal(m.wo, undefined);
   assert.equal(L.playerStats(t).matches, 1);
 });
+
+test('double knockout: everyone but the champion goes out on a second loss', () => {
+  for (let n = 3; n <= 16; n++) {
+    for (const reset of [true, false]) {
+      const t = L.createTournament({ name: 'd', format: 'double', names: names(n), settings: { gfReset: reset } });
+      playAll(t);
+      const pod = L.podium(t);
+      assert.ok(pod && pod.first && pod.second && pod.third, `podium n=${n}`);
+      assert.equal(new Set([pod.first, pod.second, pod.third]).size, 3);
+      const real = L.allMatches(t).filter(m => L.isDone(m) && !L.isBye(m));
+      for (const m of L.allMatches(t)) assert.ok(!(L.isReady(m) && (m.a === L.NONE || m.b === L.NONE)), 'no empty slot is played');
+      const losses = {};
+      for (const m of real) losses[L.loserOf(m)] = (losses[L.loserOf(m)] || 0) + 1;
+      for (const p of t.players) {
+        const l = losses[p.id] || 0;
+        if (p.id === pod.first) assert.ok(l <= 1, `champion lost ${l} n=${n}`);
+        // Without a second final the winners' champion can lose the grand final with one loss.
+        else if (!reset && p.id === pod.second) assert.ok(l === 1 || l === 2);
+        else assert.equal(l, 2, `${p.id} lost ${l} times, n=${n} reset=${reset}`);
+      }
+      const extra = real.length - (2 * n - 2);
+      assert.ok(extra === 0 || (reset && extra === 1), `match count n=${n}: ${real.length}`);
+      assert.equal(L.phase(t), 'done');
+      const pr = L.progress(t);
+      assert.equal(pr.done, pr.total, `progress n=${n}`);
+    }
+  }
+});
+
+test('double knockout: the losers\' side has to beat the champion twice', () => {
+  const t = L.createTournament({ name: 'd', format: 'double', names: names(4), settings: { gfReset: true } });
+  // Winners' side: a beats everyone; the losers' side is won by someone else.
+  playAll(t, m => 'a');
+  const [gf, reset] = t.bracket.grand;
+  assert.equal(L.winnerOf(gf), gf.a);
+  assert.ok(L.isBye(reset), 'no second final when the winners\' champion wins');
+  // Now replay the grand final with the losers' champion winning.
+  L.clearMatch(t, gf);
+  L.setResult(t, gf, 0, t.settings.finalRace);
+  assert.equal(reset.a, gf.a);
+  assert.equal(reset.b, gf.b);
+  assert.equal(L.podium(t), null, 'not decided before the second final');
+  L.setResult(t, reset, t.settings.finalRace, 2);
+  assert.equal(L.podium(t).first, gf.a);
+});

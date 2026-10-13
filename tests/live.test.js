@@ -6,7 +6,7 @@ import { toShared, fromShared, diff, applyPatch, stable } from '../src/live.js';
 const names = n => Array.from({ length: n }, (_, i) => `P${i + 1}`);
 
 test('a tournament survives the trip to the shared document and back', () => {
-  for (const format of ['league', 'groups', 'swiss', 'knockout']) {
+  for (const format of ['league', 'groups', 'swiss', 'knockout', 'double']) {
     const t = L.createTournament({ name: format, format, names: names(7), settings: { playoffSize: 4 } });
     const m = L.allMatches(t).find(L.isReady);
     L.addFrame(t, m, 'a', 99);
@@ -55,4 +55,15 @@ test('starting the playoff sends the new structure', () => {
 
 test('stable() ignores key order', () => {
   assert.equal(stable({ b: 1, a: [{ y: 2, x: 1 }] }), stable({ a: [{ x: 1, y: 2 }], b: 1 }));
+});
+
+test('a double knockout half-way through survives the trip and keeps going', () => {
+  const t = L.createTournament({ name: 'd', format: 'double', names: names(6), settings: {} });
+  for (const m of t.bracket.rounds[0]) if (L.isReady(m)) L.setResult(t, m, 4, 1);
+  const back = fromShared(JSON.parse(JSON.stringify(toShared(t))));
+  assert.equal(stable(toShared(back)), stable(toShared(t)));
+  const next = L.allMatches(back).find(m => L.isReady(m) && !L.isDone(m));
+  assert.ok(next, 'there is a match to play');
+  L.setResult(back, next, 4, 0);
+  assert.ok(L.isDone(next));
 });
