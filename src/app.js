@@ -503,6 +503,9 @@ function renderPlayerList(focusLast = false) {
   if (focusLast) $(`#p-${draft.names.length - 1}`)?.focus();
 }
 
+/** Asks the browser not to clear our storage when space runs low (no prompt in most browsers). */
+function persistStorage() { try { navigator.storage?.persist?.(); } catch { /* not supported */ } }
+
 function createFromDraft() {
   const names = filledNames();
   const s = draftSettings();
@@ -510,6 +513,7 @@ function createFromDraft() {
   const t = L.createTournament({ name: draft.name.trim() || tr('defaultName'), format: draft.format, game: draft.game, names, settings: s });
   if (draft.replaceId) removeTournament(draft.replaceId);
   if (!upsertTournament(t)) toast(tr('saveFailed'));
+  persistStorage();
   draft = null;
   go({ name: 't', id: t.id, tab: 'overview' });
   toast(tr('created'));
@@ -802,6 +806,11 @@ function tabStats(t) {
     [tr('stBiggest'), big ? `${big.sa}–${big.sb}` : '–', big ? `${n(big.a)} – ${n(big.b)}` : ''],
   ];
   const balls = !!t.settings.ballCount;
+  const timed = L.allMatches(t).filter(m => L.isDone(m) && !m.wo && m.frames?.length && m.startedAt && m.endedAt > m.startedAt);
+  if (timed.length) {
+    const avg = timed.reduce((sum, m) => sum + (m.endedAt - m.startedAt), 0) / timed.length;
+    kpis.push([tr('stAvgTime'), fmtDur(avg), tr('stAvgTimeSub', { n: timed.length })]);
+  }
   return `<div class="kpis">${kpis.map(([k, v, s]) => `<div class="kpi"><span class="t-over">${k}</span><span class="v">${v}</span>${s ? `<span class="t-xs">${s}</span>` : ''}</div>`).join('')}</div>
     <div class="card tbl-wrap"><table class="st">
       <thead><tr><th class="l">${tr('player')}</th><th>${tr('colP')}</th><th>${tr('colW')}–${tr('colL')}</th><th class="l">${tr('winPct')}</th><th class="hide-xs">${tr('framePct')}</th><th title="${tr('streakLong')}">${tr('streak')}</th>${balls ? `<th title="${tr('colBallsLong')}">${tr('colBalls')}</th>` : ''}<th title="Break &amp; run">B&amp;R</th></tr></thead>
@@ -937,7 +946,11 @@ function viewMatch(t, mid) {
       <span class="tools">${ballsTag}${br}</span></div>`;
   }).join('');
 
-  return header({ back: backTo, title: ctxLabel(t, m), sub: `${t.name} · ${tr('raceShort', { n: race })}`, actions: liveBadge(t) }) + `<main class="page tight match-page match-grid">
+  if (m.startedAt && !done && frames.length) afterRender.push(() => startClock(m.startedAt));
+  const clock = m.startedAt && frames.length
+    ? `<span class="tag tag-mute tnum clock" id="clock" title="${tr('matchTime')}">${fmtDur((m.endedAt || Date.now()) - m.startedAt)}</span>`
+    : '';
+  return header({ back: backTo, title: ctxLabel(t, m), sub: `${t.name} · ${tr('raceShort', { n: race })}`, actions: clock + liveBadge(t) }) + `<main class="page tight match-page match-grid">
     <div class="match-main">
     ${tables}
     <div class="table">${sights}<div class="felt">${pockets}<div class="halves">${half('a', a)}${half('b', b)}</div></div></div>
@@ -1026,6 +1039,20 @@ function quickResult(t, m, race) {
   });
 }
 
+const fmtDur = ms => {
+  const s = Math.max(0, Math.round(ms / 1000)), h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60;
+  return h ? `${h}:${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}` : `${m}:${String(sec).padStart(2, '0')}`;
+};
+let clockTimer = null;
+function startClock(since) {
+  clearInterval(clockTimer);
+  clockTimer = setInterval(() => {
+    const el = $('#clock');
+    if (!el || route.name !== 'match') { clearInterval(clockTimer); return; }
+    el.textContent = fmtDur(Date.now() - since);
+  }, 1000);
+}
+
 function afterResult(t) {
   commit(t);
   vibrate([30, 40, 60]);
@@ -1066,6 +1093,7 @@ function viewSettings() {
   return bigHeader(tr('navSettings'), tr('appName')) + `<main class="page">
     <section class="stack"><div class="sec"><span class="t-over">${tr('language')}</span></div>${prefSeg('lang', LANGS.map(l => [l.code, l.name]))}</section>
     <section class="stack"><div class="sec"><span class="t-over">${tr('theme')}</span></div>${prefSeg('theme', [['auto', tr('themeAuto')], ['dark', tr('themeDark')], ['light', tr('themeLight')]])}</section>
+    <section class="stack"><div class="card">${optRow(tr('soundLbl'), tr('soundHint'), switchBtn(db.prefs.sound !== false, 'data-act="toggleSound"', tr('soundLbl')))}</div></section>
     <section class="stack">
       <div class="sec"><span class="t-over">${tr('backupAll')}</span></div>
       <p class="t-sm ink-2">${tr('backupAllHint')}</p>
@@ -1260,14 +1288,47 @@ function ask(text, yes = tr('yes'), danger = true) {
   });
 }
 
-function toast(msg) {
+function toast(msg, action) {
   const host = $('#toast-host');
-  host.innerHTML = `<div class="toast" role="status">${esc(msg)}</div>`;
+  host.innerHTML = `<div class="toast" role="status"><span class="grow">${esc(msg)}</span>${action ? `<button class="act-t" id="toastAct">${esc(action.label)}</button>` : ''}</div>`;
+  if (action) $('#toastAct').onclick = () => { host.innerHTML = ''; action.run(); };
   clearTimeout(toast.timer);
-  toast.timer = setTimeout(() => { host.innerHTML = ''; }, 2600);
+  toast.timer = setTimeout(() => { host.innerHTML = ''; }, action ? 6000 : 2600);
 }
 
 function vibrate(p) { try { navigator.vibrate?.(p); } catch { /* not supported */ } }
+
+// Sound, synthesised so there are no files to load: a ball-on-ball clack, and a short chime for a win.
+let audio = null;
+function sound(kind) {
+  if (db.prefs.sound === false) return;
+  try {
+    audio ||= new (window.AudioContext || window.webkitAudioContext)();
+    if (audio.state === 'suspended') audio.resume();
+    const now = audio.currentTime;
+    if (kind === 'clack') {
+      const len = 0.06, buf = audio.createBuffer(1, audio.sampleRate * len, audio.sampleRate), d = buf.getChannelData(0);
+      for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / d.length, 6);
+      const src = audio.createBufferSource(); src.buffer = buf;
+      const bp = audio.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 2600; bp.Q.value = 1.4;
+      const g = audio.createGain(); g.gain.value = 0.9;
+      src.connect(bp).connect(g).connect(audio.destination); src.start(now);
+    } else {
+      [523.25, 659.25, 783.99, 1046.5].forEach((f, i) => {
+        const o = audio.createOscillator(), g = audio.createGain();
+        o.type = 'triangle'; o.frequency.value = f;
+        g.gain.setValueAtTime(0, now + i * 0.09); g.gain.linearRampToValueAtTime(0.18, now + i * 0.09 + 0.02); g.gain.exponentialRampToValueAtTime(0.001, now + i * 0.09 + 0.5);
+        o.connect(g).connect(audio.destination); o.start(now + i * 0.09); o.stop(now + i * 0.09 + 0.55);
+      });
+    }
+  } catch { /* no audio */ }
+}
+
+/** Tells screen readers the new score. */
+function announce(msg) {
+  const el = $('#sr');
+  if (el) { el.textContent = ''; setTimeout(() => { el.textContent = msg; }, 30); }
+}
 
 let wakeLock = null;
 async function keepAwake(on) {
@@ -1318,11 +1379,22 @@ function confetti() {
 async function deleteTournament(t) {
   if (!t) return false;
   const forAll = t.live && Live.isAvailable() && Live.isWritable();
-  if (!(await ask(tr(forAll ? 'confirmDeleteLive' : 'confirmDelete', { name: t.name }), tr('deleteT')))) return false;
+  if (forAll && !(await ask(tr('confirmDeleteLive', { name: t.name }), tr('deleteT')))) return false;
+  const copy = JSON.parse(JSON.stringify(t));
   if (forAll) await Live.remove(t.id);
   else if (t.live) { db.prefs.hiddenLive = [...new Set([...(db.prefs.hiddenLive || []), t.id])]; save(); }
   removeTournament(t.id);
-  toast(tr('deleted'));
+  toast(tr('deletedNamed', { name: t.name }), {
+    label: tr('undo'),
+    run: () => {
+      db.prefs.hiddenLive = (db.prefs.hiddenLive || []).filter(id => id !== copy.id);
+      save();
+      upsertTournament(copy);
+      if (forAll) Live.push(copy);
+      render();
+      toast(tr('restored'));
+    },
+  });
   return true;
 }
 
@@ -1410,6 +1482,9 @@ const actions = {
     const finished = L.addFrame(t, info.m, el.dataset.side, info.race);
     ui.pop = el.dataset.side;
     vibrate(15);
+    sound(finished ? 'win' : 'clack');
+    const [sa, sb] = L.score(info.m);
+    announce(`${L.playerName(t, info.m.a)} ${sa}, ${L.playerName(t, info.m.b)} ${sb}`);
     if (finished) afterResult(t, info.m);
     else commit(t);
     if (t.settings.ballCount) ballsSheet(t, info.m, info.m.frames.length - 1);
@@ -1515,6 +1590,7 @@ const actions = {
     save();
     render();
   },
+  toggleSound: () => { db.prefs.sound = db.prefs.sound === false; save(); render(); if (db.prefs.sound) sound('clack'); },
   install: async () => { if (installEvt) { installEvt.prompt(); installEvt = null; render(); } },
   wipe: async () => {
     if (!(await ask(tr('confirmWipe'), tr('wipe')))) return;

@@ -842,3 +842,7 @@ button.bk{ display:block; width:100%; text-align:left; }
 .xs-only{ display:none; }
 @media (max-width:420px){ .xs-only{ display:inline; } table.st th .hide-xs{ display:none; } }
 @media (max-width:420px){ table.st td.p, table.st th.p-h{ padding-right:14px; } }
+.sr-only{ position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0 0 0 0); white-space:nowrap; border:0; }
+.toast .grow{ flex:1; min-width:0; }
+.clock{ font-family:var(--f-display); font-stretch:85%; letter-spacing:.02em; font-size:13px; }
+@media (min-width:960px){ .kpis{ grid-template-columns:repeat(auto-fit, minmax(170px, 1fr)); } }
