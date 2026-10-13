@@ -1,28 +1,57 @@
-# Pool-turnering 🎱
+# Pool Turnering 🎱
 
-En lille app til at holde styr på en pool-/billardturnering mellem venner.
+En gratis app til pool-turneringer – fra fredagsturneringen med vennerne til klubaftenen.
+Ingen login, ingen server: alt gemmes på telefonen, og appen virker også uden internet.
 
-## Sådan bruges den
+*A free pool tournament app. Danish and English. No sign-up, works offline.*
 
-Åbn `index.html` i en browser (virker fint på mobilen). Der er intet at installere.
+## Hvad kan den?
 
-1. **Opsætning** – skriv spillernes navne, vælg spilform og regler (race to, point for sejr, slutspil).
-   Med 7 spillere giver spilformerne:
-   - **Alle mod alle**: 21 kampe + slutspil (25 i alt med top 4 og bronzekamp)
-   - **Gruppespil**: to grupper (4 og 3 spillere), 9 gruppekampe + slutspil (13 i alt)
-   - **Knockout**: lodtrækning, taber man er man ude – 6 kampe + bronzekamp (7 i alt)
-2. **Kampe** – i *Alle mod alle* laver appen laver et kampprogram, hvor alle møder alle én gang. Med 7 spillere bliver det
-   21 kampe fordelt på 7 runder, og i hver runde sidder én spiller over. Tryk på en kamp for at indtaste resultatet.
-3. **Stilling** – tabellen opdateres automatisk. Ved pointlighed afgøres placeringen af
-   frame-difference, derefter vundne frames og til sidst indbyrdes opgør. Nederst er en
-   alle-mod-alle-oversigt.
-4. **Slutspil** – top 4 spiller semifinaler (1 mod 4, 2 mod 3), finale og eventuelt bronzekamp.
-   Man kan også vælge kun finale (top 2) eller slet intet slutspil.
+- **Fire spilformer**
+  - **Alle mod alle** (én eller to gange) med valgfrit slutspil (top 2/4/8)
+  - **Gruppespil** med 2–8 grupper, hvor de bedste fra hver gruppe går i slutspil. Første runde i slutspillet undgår så vidt muligt kampe mellem spillere fra samme gruppe.
+  - **Schweizer system** – et fast antal runder, hvor man møder spillere med samme antal sejre og aldrig den samme to gange
+  - **Knockout** med korrekt seedning og fri runde ("bye") til de bedste, når antallet ikke går op
+  - Antallet af kampe vises, før man starter.
+- **Live scoring**: tryk på vinderen af hver frame. Appen viser, hvem der breaker (på skift eller vinderen breaker), kan fortryde og fordeler kampene på flere borde.
+- **"Næste kamp"**: foreslår kampe med spillere, der ikke er i gang, og som har ventet længst.
+- **Stilling** med point, frame-difference, indbyrdes opgør, form og alle-mod-alle-matrix. I schweizer system afgøres pointlighed af Buchholz.
+- **Statistik** pr. turnering (sejr %, frame %, sejrsstimer, break & runs, største sejr) og en **samlet spillerrangliste** på tværs af alle turneringer.
+- **Deling**: stillingen som tekst til gruppechatten, eller hele turneringen som en kode/et link, som andre kan importere.
+- **Backup** af alle turneringer som kode eller fil.
+- Lyst/mørkt tema, dansk/engelsk, og den kan installeres på hjemmeskærmen (PWA).
 
-Data gemmes i browseren på den enhed, I bruger. Under *Opsætning* kan I eksportere og importere en
-backup-fil, hvis turneringen skal flyttes til en anden telefon.
+## Kør den lokalt
 
-## Læg den online (valgfrit)
+Der er intet build-trin. Server mappen med en vilkårlig webserver:
 
-Slå GitHub Pages til på repoet (Settings → Pages → deploy fra branchen), så kan alle åbne appen via et link.
-Bemærk, at resultaterne stadig kun gemmes på den telefon, de bliver indtastet på – udnævn én "dommer".
+```sh
+npm start          # python3 -m http.server 8080
+# åbn http://localhost:8080
+```
+
+## Tests
+
+```sh
+npm test           # node --test, ingen afhængigheder
+```
+
+Testene dækker kampprogrammer, seedning, schweizer-parring, stilling og tiebreak, live scoring og
+konvertering af turneringer fra den første version af appen.
+
+## Læg den online (GitHub Pages)
+
+1. Gå til **Settings → Pages** på repoet, og vælg **Source: GitHub Actions**.
+2. Merge til `main`. Workflowen `.github/workflows/pages.yml` kører testene og udgiver appen.
+3. Appen ligger derefter på `https://<brugernavn>.github.io/<repo>/`.
+
+## Struktur
+
+| Fil | Indhold |
+| --- | --- |
+| `src/logic.js` | Al turneringslogik (rene funktioner, testet) |
+| `src/app.js` | Skærme, navigation og live scoring |
+| `src/store.js` | Lagring i `localStorage` og konvertering af gamle data |
+| `src/share.js` | Turneringskoder (komprimeret JSON) og tekst til deling |
+| `src/i18n.js` | Tekster på dansk og engelsk |
+| `sw.js`, `manifest.webmanifest` | Offline-understøttelse og installation |
