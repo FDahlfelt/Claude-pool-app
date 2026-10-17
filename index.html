@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="da">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Find virksomheder uden hjemmeside</title>
+  <meta name="description" content="Se virksomheder i nærheden, der ikke har en registreret hjemmeside, på et kort.">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="logo">●</span>
+      <span>Sitefinder</span>
+    </div>
+    <form id="search-form" class="search" autocomplete="off">
+      <input id="search-input" type="search" placeholder="Søg efter by, adresse eller postnummer…" aria-label="Søg efter sted">
+      <button type="submit">Søg</button>
+    </form>
+    <button id="locate-btn" class="btn ghost" title="Brug min placering">📍<span class="lbl"> Nær mig</span></button>
+    <button id="toggle-panel" class="btn ghost mobile-only">☰<span class="lbl"> Liste</span></button>
+  </header>
+
+  <main class="layout">
+    <aside id="panel" class="panel">
+      <section class="stats">
+        <div class="stat no-site"><b id="stat-none">0</b><span>uden hjemmeside</span></div>
+        <div class="stat social"><b id="stat-social">0</b><span>kun social profil</span></div>
+        <div class="stat total"><b id="stat-total">0</b><span>i alt på kortet</span></div>
+      </section>
+
+      <section class="filters">
+        <label>Branche
+          <select id="filter-category"><option value="">Alle brancher</option></select>
+        </label>
+        <label>Hjemmeside
+          <select id="filter-website">
+            <option value="none">Uden registreret hjemmeside</option>
+            <option value="social">Kun social profil</option>
+            <option value="none+social">Uden hjemmeside + kun social</option>
+            <option value="has">Med hjemmeside</option>
+            <option value="all">Alle</option>
+          </select>
+        </label>
+        <label>Filtrér på navn
+          <input id="filter-text" type="search" placeholder="fx frisør, pizza…">
+        </label>
+        <div class="checks">
+          <label><input id="filter-phone" type="checkbox"> Har telefon</label>
+          <label><input id="filter-email" type="checkbox"> Har e-mail</label>
+          <label><input id="filter-saved" type="checkbox"> Kun gemte</label>
+        </div>
+        <button id="export-btn" class="btn small">⬇ Eksportér CSV</button>
+      </section>
+
+      <div id="status" class="status"></div>
+      <ul id="list" class="list"></ul>
+      <button id="more-btn" class="btn small more" hidden>Vis flere</button>
+
+      <p class="note">
+        "Uden registreret hjemmeside" betyder, at datakilden ikke har registreret en hjemmeside.
+        Det betyder ikke, at virksomheden beviseligt mangler én – kontrollér altid selv.
+      </p>
+    </aside>
+
+    <div class="map-wrap">
+      <div id="map"></div>
+      <button id="search-area" class="search-area" hidden>🔄 Søg i dette område</button>
+      <div class="legend">
+        <span><i class="dot none"></i>Uden hjemmeside</span>
+        <span><i class="dot social"></i>Kun social profil</span>
+        <span><i class="dot has"></i>Med hjemmeside</span>
+      </div>
+      <div id="loader" class="loader" hidden>Henter virksomheder…</div>
+    </div>
+
+    <aside id="detail" class="detail" hidden></aside>
+  </main>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
